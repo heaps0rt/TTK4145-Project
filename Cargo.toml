@@ -1,0 +1,3 @@
+[dependencies]
+network-rust = { git = "https://github.com/TTK4145/network-rust", tag = "v0.X.0" }
+driver-rust = { git = "https://github.com/TTK4145/driver-rust", tag = "v0.X.0" }
