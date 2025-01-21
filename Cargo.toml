@@ -1,3 +1,10 @@
+[package]
+name = "ttk4145-project"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 [dependencies]
-network-rust = { git = "https://github.com/TTK4145/network-rust", tag = "v0.X.0" }
-driver-rust = { git = "https://github.com/TTK4145/driver-rust", tag = "v0.X.0" }
+driver-rust = { git = "https://github.com/TTK4145/driver-rust"}
+crossbeam-channel = "0.5"
