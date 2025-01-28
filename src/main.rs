@@ -97,14 +97,22 @@ fn main() -> std::io::Result<()> {
             recv(floor_sensor_rx) -> a => { // Get floor status and save last floor for later use
                 let floor = a.unwrap();
                 println!("Floor: {:#?}", floor);
-                if elevator.floor_sensor().is_some() {
-                    last_floor = floor;
-                    println!("Last floor updated to: {:#?}", last_floor);
-                }
+                
                 if destination_list.contains(&floor){
                     elevator.motor_direction(e::DIRN_STOP);
                     println!("Stopper midlertidig");
                     destination_list.remove(&floor);
+                    if destination_list.is_empty() {
+                        dirn = e::DIRN_STOP;
+                    }
+                    else {
+                        elevator.motor_direction(dirn);
+                        println!("Fortsetter");
+                    }
+                }
+                if elevator.floor_sensor().is_some() {
+                    last_floor = floor;
+                    println!("Last floor updated to: {:#?}", last_floor);
                     elevator.call_button_light(floor, e::CAB, false);
                     if dirn == e::DIRN_DOWN {
                         elevator.call_button_light(floor, e::HALL_DOWN, false);
@@ -112,12 +120,9 @@ fn main() -> std::io::Result<()> {
                     else if dirn == e::DIRN_UP {
                         elevator.call_button_light(floor, e::HALL_UP, false);
                     }
-                    if destination_list.is_empty() {
-                        dirn = e::DIRN_STOP;
-                    }
-                    else {
-                        elevator.motor_direction(dirn);
-                        println!("Fortsetter");
+                    else if floor == 0 || floor == (elev_num_floors-1) {
+                        elevator.call_button_light(floor, e::HALL_DOWN, false);
+                        elevator.call_button_light(floor, e::HALL_UP, false);
                     }
                 }
 
@@ -173,7 +178,6 @@ fn main() -> std::io::Result<()> {
                 status: element.status,
             };
             final_orders.insert(new_order);
-            print_order(element);
         }
         order_list = final_orders;
     }
