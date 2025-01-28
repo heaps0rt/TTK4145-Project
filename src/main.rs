@@ -70,11 +70,8 @@ fn main() -> std::io::Result<()> {
 
     let mut last_floor: u8 = elev_num_floors+1;
 
-    let direction: u8 = e::DIRN_DOWN; // How we remember what way we are going since we cannot extract this from the hardware.
-    // Needs to be updated everytime motor_direction is changed
-
     let mut order_list = HashSet::new();
-    let mut destination_list = HashSet::new();
+    let mut destination_list = HashSet::from([0]);
 
 
     loop {
@@ -102,23 +99,39 @@ fn main() -> std::io::Result<()> {
                     last_floor = floor;
                     println!("Last floor updated to: {:#?}", last_floor);
                 }
-                if floor == 0 {
-                    dirn = e::DIRN_STOP;
-                    elevator.motor_direction(dirn);
-                    println!("Stopper")
+                if destination_list.contains(&floor){
+                    elevator.motor_direction(e::DIRN_STOP);
+                    println!("Stopper midlertidig");
+                    destination_list.remove(&floor);
+                    if destination_list.is_empty() {
+                        dirn = e::DIRN_STOP;
+                    }
+                    else {
+                        elevator.motor_direction(dirn);
+                        println!("Fortsetter");
+                    }
                 }
+
                 
             }
         }
         for element in &order_list {
-            if element.direction == 0 && direction == e::DIRN_UP && element.floor_number > last_floor {
+            if element.direction == 0 && dirn == e::DIRN_UP && element.floor_number > last_floor {
                 destination_list.insert(element.floor_number);
             }
-            else if element.direction == 1 && direction == e::DIRN_DOWN && element.floor_number < last_floor {
+            else if element.direction == 1 && dirn == e::DIRN_DOWN && element.floor_number < last_floor {
                 destination_list.insert(element.floor_number);
             }
-            else if direction == e::DIRN_STOP && element.floor_number != last_floor {
+            else if dirn == e::DIRN_STOP && element.floor_number != last_floor {
                 destination_list.insert(element.floor_number);
+                if element.floor_number > last_floor {
+                    dirn = e::DIRN_UP;
+                    elevator.motor_direction(dirn);
+                }
+                else if element.floor_number < last_floor {
+                    dirn = e::DIRN_DOWN;
+                    elevator.motor_direction(dirn);
+                }
             }
         }
     }
