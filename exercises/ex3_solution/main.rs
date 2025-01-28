@@ -49,13 +49,13 @@ fn main() -> std::io::Result<()> {
 
 
     loop {
-            recv(call_button_rx) -> a => {
+            recv(call_button_rx) -> a => { // Get info from call button and add it to the list of floors ordered
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
                 elevator.call_button_light(call_button.floor, call_button.call, true);
-                orderedFloors.insert(call_button)
+                orderedFloors.insert(call_button.floor)
             }
-            recv(floor_sensor_rx) -> a => {
+            recv(floor_sensor_rx) -> a => { // Get floor status and save last floor for later use
                 let floor = a.unwrap();
                 println!("Floor: {:#?}", floor);
                 if elevator.floor_sensor().is_none().not() {
