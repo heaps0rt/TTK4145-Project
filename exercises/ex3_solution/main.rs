@@ -49,6 +49,7 @@ fn main() -> std::io::Result<()> {
 
 
     loop {
+        cbc::select! {
             recv(call_button_rx) -> a => { // Get info from call button and add it to the list of floors ordered
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
@@ -62,6 +63,8 @@ fn main() -> std::io::Result<()> {
                     lastFloor = floor;
                 }
             }
+        }
 
 
+    }
 }
