@@ -1,5 +1,6 @@
 use std::thread::*;
 use std::time::*;
+use std::collections::HashSet;
 
 use crossbeam_channel as cbc;
 
@@ -42,20 +43,25 @@ fn main() -> std::io::Result<()> {
         elevator.motor_direction(dirn);
     }
 
-    let mut currentFloor = none;
+    let mut lastFloor = none;
+
+    let mut orderedFloors = HashSet::new();
+
 
     loop {
             recv(call_button_rx) -> a => {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
                 elevator.call_button_light(call_button.floor, call_button.call, true);
+                orderedFloors.insert(call_button)
             }
             recv(floor_sensor_rx) -> a => {
                 let floor = a.unwrap();
                 println!("Floor: {:#?}", floor);
-                currentFloor = floor;
-
-
+                if elevator.floor_sensor().is_none().not() {
+                    lastFloor = floor;
+                }
             }
+
 
 }
