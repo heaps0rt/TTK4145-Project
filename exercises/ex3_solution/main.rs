@@ -54,7 +54,7 @@ fn main() -> std::io::Result<()> {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
                 elevator.call_button_light(call_button.floor, call_button.call, true);
-                orderedFloors.insert(call_button.floor)
+                orderedFloors.insert(call_button.floor);
             }
             recv(floor_sensor_rx) -> a => { // Get floor status and save last floor for later use
                 let floor = a.unwrap();
