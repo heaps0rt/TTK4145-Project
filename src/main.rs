@@ -8,6 +8,12 @@ use crossbeam_channel as cbc;
 use driver_rust::elevio;
 use driver_rust::elevio::elev as e;
 
+struct Order {
+    floor_number: u8,
+    direction: u8,
+    status: String,
+}
+
 fn main() -> std::io::Result<()> {
     let elev_num_floors = 4; // Set floor count
     let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?; // Initialize and connect elevator
@@ -44,9 +50,9 @@ fn main() -> std::io::Result<()> {
         elevator.motor_direction(dirn);
     }
 
-    let mut last_floor:u8 = elev_num_floors+1;
+    let mut last_floor: u8 = elev_num_floors+1;
 
-    let direction:i8 = -1; // Måte å huske retningen, ikke pen atm. Opp er 1, ned er -1 og stopp er 0. Denne må endres hver gang retning endres
+    let direction: u8 = e::DIRN_DOWN; // How we remember what way we are going since we cannot extract this from the hardware. Needs to be updated everytime motor_direction is changed
 
     let mut ordered_floors = HashSet::new();
 
@@ -59,17 +65,17 @@ fn main() -> std::io::Result<()> {
                 elevator.call_button_light(call_button.floor, call_button.call, true);
 
                 // DISGUSTING nested ifs to add floor correctly
-                if direction == -1 {
+                if direction == e::DIRN_DOWN {
                     if call_button.floor < last_floor {
                         ordered_floors.insert(call_button.floor);
                     }
                 }
-                if direction == 1 {
+                if direction == e::DIRN_UP {
                     if call_button.floor > last_floor {
                         ordered_floors.insert(call_button.floor);
                     }
                 }
-                if direction == 0 {
+                if direction == e::DIRN_STOP {
                     ordered_floors.insert(call_button.floor);
                 }
                 
