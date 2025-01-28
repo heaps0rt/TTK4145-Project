@@ -44,9 +44,11 @@ fn main() -> std::io::Result<()> {
         elevator.motor_direction(dirn);
     }
 
-    let mut lastFloor:u8 = elev_num_floors+1;
+    let mut last_floor:u8 = elev_num_floors+1;
 
-    let mut orderedFloors = HashSet::new();
+    let direction:i8 = -1; // Måte å huske retningen, ikke pen atm. Opp er 1, ned er -1 og stopp er 0. Denne må endres hver gang retning endres
+
+    let mut ordered_floors = HashSet::new();
 
 
     loop {
@@ -55,14 +57,29 @@ fn main() -> std::io::Result<()> {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
                 elevator.call_button_light(call_button.floor, call_button.call, true);
-                orderedFloors.insert(call_button.floor);
+
+                // DISGUSTING nested ifs to add floor correctly
+                if direction == -1 {
+                    if call_button.floor < last_floor {
+                        ordered_floors.insert(call_button.floor);
+                    }
+                }
+                if direction == 1 {
+                    if call_button.floor > last_floor {
+                        ordered_floors.insert(call_button.floor);
+                    }
+                }
+                if direction == 0 {
+                    ordered_floors.insert(call_button.floor);
+                }
+                
             }
             recv(floor_sensor_rx) -> a => { // Get floor status and save last floor for later use
                 let floor = a.unwrap();
                 println!("Floor: {:#?}", floor);
                 if elevator.floor_sensor().is_some() {
-                    lastFloor = floor;
-                    println!("Last floor updated to: {:#?}", lastFloor);
+                    last_floor = floor;
+                    println!("Last floor updated to: {:#?}", last_floor);
                 }
                 if floor == 0 {
                     dirn = e::DIRN_STOP;
