@@ -8,6 +8,8 @@ use crossbeam_channel as cbc;
 
 use driver_rust::elevio;
 use driver_rust::elevio::elev::Elevator;
+use driver_rust::elevio::elev::HALL_DOWN;
+use driver_rust::elevio::elev::HALL_UP;
 use driver_rust::elevio::elev as e;
 use driver_rust::elevio::poll::CallButton;
 
@@ -63,10 +65,10 @@ fn main() -> std::io::Result<()> {
     }
 
     let mut dirn = e::DIRN_DOWN; // Set mutex direction
-    if elevator.floor_sensor().is_none() { // If the elevator is not on a floor, send it down
-        elevator.motor_direction(dirn);
-        println!("På vei ned");
-    }
+    // If the elevator is not on a floor, send it down
+    elevator.motor_direction(dirn);
+    println!("På vei ned");
+    
 
     let mut last_floor: u8 = elev_num_floors+1;
 
@@ -103,6 +105,13 @@ fn main() -> std::io::Result<()> {
                     elevator.motor_direction(e::DIRN_STOP);
                     println!("Stopper midlertidig");
                     destination_list.remove(&floor);
+                    elevator.call_button_light(floor, e::CAB, false);
+                    if dirn == e::DIRN_DOWN {
+                        elevator.call_button_light(floor, e::HALL_DOWN, false);
+                    }
+                    else if dirn == e::DIRN_UP {
+                        elevator.call_button_light(floor, e::HALL_UP, false);
+                    }
                     if destination_list.is_empty() {
                         dirn = e::DIRN_STOP;
                     }
@@ -115,24 +124,57 @@ fn main() -> std::io::Result<()> {
                 
             }
         }
+        let mut orders_added = HashSet::new();
         for element in &order_list {
-            if element.direction == 0 && dirn == e::DIRN_UP && element.floor_number > last_floor {
+            if (element.direction == 0 || element.direction == 2) && dirn == e::DIRN_UP && element.floor_number > last_floor {
                 destination_list.insert(element.floor_number);
+                let new_order = Order {
+                    floor_number: element.floor_number,
+                    direction: element.direction,
+                    status: element.status,
+                };
+                orders_added.insert(new_order);
             }
-            else if element.direction == 1 && dirn == e::DIRN_DOWN && element.floor_number < last_floor {
+            else if (element.direction == 1 || element.direction == 2) && dirn == e::DIRN_DOWN && element.floor_number < last_floor {
                 destination_list.insert(element.floor_number);
+                let new_order = Order {
+                    floor_number: element.floor_number,
+                    direction: element.direction,
+                    status: element.status,
+                };
+                orders_added.insert(new_order);
             }
             else if dirn == e::DIRN_STOP && element.floor_number != last_floor {
                 destination_list.insert(element.floor_number);
+                let new_order = Order {
+                    floor_number: element.floor_number,
+                    direction: element.direction,
+                    status: element.status,
+                };
+                orders_added.insert(new_order);
                 if element.floor_number > last_floor {
                     dirn = e::DIRN_UP;
                     elevator.motor_direction(dirn);
+                    println!("Kjører ned")
                 }
                 else if element.floor_number < last_floor {
                     dirn = e::DIRN_DOWN;
                     elevator.motor_direction(dirn);
+                    println!("Kjører opp")
                 }
             }
         }
+        let almost_final_orders = order_list.difference(&orders_added).collect::<HashSet<_>>();
+        let mut final_orders = HashSet::new();
+        for element in &almost_final_orders {
+            let new_order = Order {
+                floor_number: element.floor_number,
+                direction: element.direction,
+                status: element.status,
+            };
+            final_orders.insert(new_order);
+            print_order(element);
+        }
+        order_list = final_orders;
     }
 }
