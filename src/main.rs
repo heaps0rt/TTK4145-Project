@@ -64,6 +64,10 @@ fn main() -> std::io::Result<()> {
                     lastFloor = floor;
                     println!("Last floor updated to: {:#?}", lastFloor);
                 }
+                if floor == 0 {
+                    dirn = e::DIRN_STOP;
+                    elevator.motor_direction(dirn);
+                }
             }
         }
 
