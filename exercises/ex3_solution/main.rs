@@ -42,6 +42,16 @@ fn main() -> std::io::Result<()> {
         elevator.motor_direction(dirn);
     }
 
+    loop {
+        thread::spawn(move || {
+            recv(call_button_rx) -> a => {
+                let call_button = a.unwrap();
+                println!("{:#?}", call_button);
+                elevator.call_button_light(call_button.floor, call_button.call, true);
+            }
+        })
 
+
+    }
 
 }
