@@ -3,15 +3,32 @@ use std::time::*;
 use std::collections::HashSet;
 use std::u8;
 
+use crossbeam_channel::Receiver;
 use crossbeam_channel as cbc;
 
 use driver_rust::elevio;
+use driver_rust::elevio::elev::Elevator;
 use driver_rust::elevio::elev as e;
+use driver_rust::elevio::poll::CallButton;
 
-struct Order {
-    floor_number: u8,
-    direction: u8,
-    status: String,
+pub const WAITING: u8 = 0;
+pub const SENT: u8 = 1;
+pub const ACK: u8 = 2;
+
+#[derive(PartialEq, Eq, Hash, Copy, Clone)]
+pub struct Order {
+    pub floor_number: u8,
+    pub direction: u8,
+    pub status: u8,
+}
+fn print_order(order: &Order) -> () {
+    let floor = order.floor_number;
+    let direction = order.direction;
+    let status = order.status;
+    println!("Floor: \n{:#?}", floor);
+    println!("Direction: \n{:#?}", direction);
+    println!("Status: \n{:#?}", status);
+
 }
 
 fn main() -> std::io::Result<()> {
@@ -52,7 +69,8 @@ fn main() -> std::io::Result<()> {
 
     let mut last_floor: u8 = elev_num_floors+1;
 
-    let direction: u8 = e::DIRN_DOWN; // How we remember what way we are going since we cannot extract this from the hardware. Needs to be updated everytime motor_direction is changed
+    let direction: u8 = e::DIRN_DOWN; // How we remember what way we are going since we cannot extract this from the hardware.
+    // Needs to be updated everytime motor_direction is changed
 
     let mut ordered_floors = HashSet::new();
 
@@ -63,23 +81,18 @@ fn main() -> std::io::Result<()> {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
                 elevator.call_button_light(call_button.floor, call_button.call, true);
+                let new_order = Order {
+                    floor_number: call_button.floor,
+                    direction: call_button.call,
+                    status: WAITING,
+                };
 
-                // DISGUSTING nested ifs to add floor correctly
-                if direction == e::DIRN_DOWN {
-                    if call_button.floor < last_floor {
-                        ordered_floors.insert(call_button.floor);
-                    }
-                }
-                if direction == e::DIRN_UP {
-                    if call_button.floor > last_floor {
-                        ordered_floors.insert(call_button.floor);
-                    }
-                }
-                if direction == e::DIRN_STOP {
-                    ordered_floors.insert(call_button.floor);
-                }
-                
+                ordered_floors.insert(new_order);
+                print_order(&new_order);
+            
             }
+        
+
             recv(floor_sensor_rx) -> a => { // Get floor status and save last floor for later use
                 let floor = a.unwrap();
                 println!("Floor: {:#?}", floor);
@@ -91,9 +104,8 @@ fn main() -> std::io::Result<()> {
                     dirn = e::DIRN_STOP;
                     elevator.motor_direction(dirn);
                 }
+                
             }
         }
-
-
     }
 }
