@@ -65,6 +65,7 @@ fn main() -> std::io::Result<()> {
     let mut dirn = e::DIRN_DOWN; // Set mutex direction
     if elevator.floor_sensor().is_none() { // If the elevator is not on a floor, send it down
         elevator.motor_direction(dirn);
+        println!("På vei ned");
     }
 
     let mut last_floor: u8 = elev_num_floors+1;
@@ -72,7 +73,8 @@ fn main() -> std::io::Result<()> {
     let direction: u8 = e::DIRN_DOWN; // How we remember what way we are going since we cannot extract this from the hardware.
     // Needs to be updated everytime motor_direction is changed
 
-    let mut ordered_floors = HashSet::new();
+    let mut order_list = HashSet::new();
+    let mut destination_list = HashSet::new();
 
 
     loop {
@@ -87,7 +89,7 @@ fn main() -> std::io::Result<()> {
                     status: WAITING,
                 };
 
-                ordered_floors.insert(new_order);
+                order_list.insert(new_order);
                 print_order(&new_order);
             
             }
@@ -103,8 +105,20 @@ fn main() -> std::io::Result<()> {
                 if floor == 0 {
                     dirn = e::DIRN_STOP;
                     elevator.motor_direction(dirn);
+                    println!("Stopper")
                 }
                 
+            }
+        }
+        for element in &order_list {
+            if element.direction == 0 && direction == e::DIRN_UP && element.floor_number > last_floor {
+                destination_list.insert(element.floor_number);
+            }
+            else if element.direction == 1 && direction == e::DIRN_DOWN && element.floor_number < last_floor {
+                destination_list.insert(element.floor_number);
+            }
+            else if direction == e::DIRN_STOP && element.floor_number != last_floor {
+                destination_list.insert(element.floor_number);
             }
         }
     }
