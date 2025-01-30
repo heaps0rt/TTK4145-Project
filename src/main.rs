@@ -120,6 +120,10 @@ fn main() -> std::io::Result<()> {
                     else if dirn == e::DIRN_UP {
                         elevator.call_button_light(floor, e::HALL_UP, false);
                     }
+                    else if dirn == e::DIRN_STOP {
+                        elevator.call_button_light(floor, e::HALL_DOWN, false);
+                        elevator.call_button_light(floor, e::HALL_UP, false);
+                    }
                     else if floor == 0 || floor == (elev_num_floors-1) {
                         elevator.call_button_light(floor, e::HALL_DOWN, false);
                         elevator.call_button_light(floor, e::HALL_UP, false);
