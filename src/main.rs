@@ -34,6 +34,9 @@ fn print_order(order: &Order) -> () {
 }
 
 fn main() -> std::io::Result<()> {
+    let five_hundred_millis = Duration::from_millis(500);
+    let now = Instant::now();
+
     let elev_num_floors = 4; // Set floor count
     let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?; // Initialize and connect elevator
     println!("Elevator started:\n{:#?}", elevator);
@@ -89,7 +92,7 @@ fn main() -> std::io::Result<()> {
                 };
 
                 order_list.insert(new_order);
-                print_order(&new_order);
+                //print_order(&new_order);
             
             }
         
@@ -97,11 +100,29 @@ fn main() -> std::io::Result<()> {
             recv(floor_sensor_rx) -> a => { // Get floor status and save last floor for later use
                 let floor = a.unwrap();
                 println!("Floor: {:#?}", floor);
+
+                if elevator.floor_sensor().is_some() {
+                    last_floor = floor;
+                    println!("Last floor updated to: {:#?}", last_floor);
+                    elevator.call_button_light(floor, e::CAB, false);
+                    if dirn == e::DIRN_DOWN || floor == (elev_num_floors-1) {
+                        elevator.call_button_light(floor, e::HALL_DOWN, false);
+                    }
+                    else if dirn == e::DIRN_UP || floor == 0 {
+                        elevator.call_button_light(floor, e::HALL_UP, false);
+                    }
+                    else if dirn == e::DIRN_STOP {
+                        elevator.call_button_light(floor, e::HALL_DOWN, false);
+                        elevator.call_button_light(floor, e::HALL_UP, false);
+                    }
+                }
                 
                 if destination_list.contains(&floor){
                     elevator.motor_direction(e::DIRN_STOP);
                     println!("Stopper midlertidig");
                     destination_list.remove(&floor);
+                    sleep(five_hundred_millis);
+                    assert!(now.elapsed() >= five_hundred_millis);
                     if destination_list.is_empty() {
                         dirn = e::DIRN_STOP;
                     }
@@ -110,21 +131,7 @@ fn main() -> std::io::Result<()> {
                         println!("Fortsetter");
                     }
                 }
-                if elevator.floor_sensor().is_some() {
-                    last_floor = floor;
-                    println!("Last floor updated to: {:#?}", last_floor);
-                    elevator.call_button_light(floor, e::CAB, false);
-                    if dirn == e::DIRN_DOWN {
-                        elevator.call_button_light(floor, e::HALL_DOWN, false);
-                    }
-                    else if dirn == e::DIRN_UP {
-                        elevator.call_button_light(floor, e::HALL_UP, false);
-                    }
-                    else if dirn == e::DIRN_STOP {
-                        elevator.call_button_light(floor, e::HALL_DOWN, false);
-                        elevator.call_button_light(floor, e::HALL_UP, false);
-                    }
-                }
+                
 
                 
             }
@@ -149,7 +156,7 @@ fn main() -> std::io::Result<()> {
                 };
                 orders_added.insert(new_order);
             }
-            else if dirn == e::DIRN_STOP && element.floor_number != last_floor {
+            else if dirn == e::DIRN_STOP {
                 destination_list.insert(element.floor_number);
                 let new_order = Order {
                     floor_number: element.floor_number,
@@ -160,12 +167,12 @@ fn main() -> std::io::Result<()> {
                 if element.floor_number > last_floor {
                     dirn = e::DIRN_UP;
                     elevator.motor_direction(dirn);
-                    println!("Kjører ned")
+                    println!("Kjører opp")
                 }
                 else if element.floor_number < last_floor {
                     dirn = e::DIRN_DOWN;
                     elevator.motor_direction(dirn);
-                    println!("Kjører opp")
+                    println!("Kjører ned")
                 }
             }
         }
