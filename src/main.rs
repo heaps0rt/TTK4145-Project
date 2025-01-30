@@ -2,12 +2,16 @@ use std::thread::*;
 use std::time::*;
 use std::collections::HashSet;
 use std::u8;
+use std::sync::*;
 
 use crossbeam_channel::Receiver;
 use crossbeam_channel as cbc;
 
 use driver_rust::elevio;
 use driver_rust::elevio::elev::Elevator;
+use driver_rust::elevio::elev::DIRN_DOWN;
+use driver_rust::elevio::elev::DIRN_STOP;
+use driver_rust::elevio::elev::DIRN_UP;
 use driver_rust::elevio::elev::HALL_DOWN;
 use driver_rust::elevio::elev::HALL_UP;
 use driver_rust::elevio::elev as e;
@@ -33,41 +37,114 @@ fn print_order(order: &Order) -> () {
 
 }
 
-fn commute_orders(order_list: &HashSet<Order>, destination_list: &HashSet<u8>, last_floor: u8, dirn: &u8, elevator: &Elevator) -> (HashSet<Order>, HashSet<u8>) {
+// The big ordering function. Turns orders on the order list into destinations for the elevator.
+fn commute_orders(order_list: &HashSet<Order>, destination_list: &HashSet<u8>, last_floor: u8, dirn: &u8, elevator: &Elevator, elev_num_floors: u8) -> (HashSet<Order>, HashSet<u8>, u8) {
+    // Copying variables to keep owner control happy
     let mut order_list_copy = order_list.clone();
     let mut destination_list_copy = destination_list.clone();
     let mut dirn_copy = dirn.clone();
-
+    // Creating a set to remove later
     let mut orders_to_remove = HashSet::new();
-    for element in order_list {
-        if (element.direction == 0 || element.direction == 2) && dirn_copy == e::DIRN_UP && element.floor_number > last_floor {
-            destination_list_copy.insert(element.floor_number);
-            orders_to_remove.insert(element);
-        }
-        else if (element.direction == 1 || element.direction == 2) && dirn_copy == e::DIRN_DOWN && element.floor_number < last_floor {
-            destination_list_copy.insert(element.floor_number);
-            orders_to_remove.insert(element);
-        }
-        else if dirn_copy == e::DIRN_STOP {
-            destination_list_copy.insert(element.floor_number);
-            orders_to_remove.insert(element);
-            if element.floor_number > last_floor {
-                dirn_copy = e::DIRN_UP;
-                elevator.motor_direction(dirn_copy);
-                println!("Kjører opp")
+    for element in &order_list_copy {
+        match dirn_copy {
+            e::DIRN_UP => {
+                match element.direction {
+                    e::HALL_UP|e::CAB => {
+                        if element.floor_number > last_floor {
+                            // Adding to destinations and scheduling removal from orders
+                            destination_list_copy.insert(element.floor_number);
+                            orders_to_remove.insert(element);
+                        }
+                    }
+                    e::HALL_DOWN => {
+                        if element.floor_number == (elev_num_floors-1) {
+                            // Adding to destinations and scheduling removal from orders
+                            destination_list_copy.insert(element.floor_number);
+                            orders_to_remove.insert(element);
+                        }
+                    }
+                    3_u8..=u8::MAX => {
+                        println!("Noe har gått kraftig galt");
+                    }
+                }
             }
-            else if element.floor_number < last_floor {
-                dirn_copy = e::DIRN_DOWN;
-                elevator.motor_direction(dirn_copy);
-                println!("Kjører ned")
+            e::DIRN_DOWN => {
+                match element.direction {
+                    e::HALL_DOWN|e::CAB => {
+                        if element.floor_number < last_floor {
+                            // Adding to destinations and scheduling removal from orders
+                            destination_list_copy.insert(element.floor_number);
+                            orders_to_remove.insert(element);
+                        }
+                    }
+                    e::HALL_UP => {
+                        if element.floor_number == 0 {
+                            // Adding to destinations and scheduling removal from orders
+                            destination_list_copy.insert(element.floor_number);
+                            orders_to_remove.insert(element);
+                        }
+                    }
+                    3_u8..=u8::MAX => {
+                        println!("Noe har gått kraftig galt");
+                    }
+                }
+            }
+            e::DIRN_STOP => {
+                // Adding to destinations and scheduling removal from orders
+                destination_list_copy.insert(element.floor_number);
+                orders_to_remove.insert(element);
+                // Restarting elevator
+                if element.floor_number < last_floor {
+                    dirn_copy = e::DIRN_DOWN;
+                    elevator.motor_direction(dirn_copy);
+                }
+                else if element.floor_number > last_floor {
+                    dirn_copy = e::DIRN_UP;
+                    elevator.motor_direction(dirn_copy);
+                }
+                break; // Breaking out so only one order is added
+            }
+            2_u8..=254_u8 => {
+                println!("Noe har gått kraftig galt");
+            }
+        }
+        // Removing unneccesary orders
+        if element.floor_number == last_floor {
+            match element.direction {
+                e::HALL_DOWN => {
+                    if dirn_copy == e::DIRN_DOWN {
+                        // Scheduling deletion of order
+                        orders_to_remove.insert(element);
+                        elevator.call_button_light(last_floor, e::HALL_DOWN, false);
+                    }
+                }
+                e::HALL_UP => {
+                    if dirn_copy == e::DIRN_UP {
+                        // Scheduling deletion of order
+                        orders_to_remove.insert(element);
+                        elevator.call_button_light(last_floor, e::HALL_UP, false);
+                    }
+                }
+                e::CAB => {
+                    // Scheduling deletion of order
+                    orders_to_remove.insert(element);
+                    elevator.call_button_light(last_floor, e::CAB, false);
+                }
+                3_u8..=u8::MAX => {
+                    println!("Noe har gått kraftig galt");
+                }
             }
         }
     }
+    // Copying a copy to be able to use it in the for loop
+    let mut order_list_copy_copy = order_list_copy.clone();
+    // Removing scheduled orders from the order list we will return
     for element in &orders_to_remove {
-        order_list_copy.remove(element);
+        order_list_copy_copy.remove(element);
     }
 
-    return (order_list_copy, destination_list_copy);
+    // Returning values for further use
+    return (order_list_copy_copy, destination_list_copy, dirn_copy);
 
 }
 
@@ -86,6 +163,7 @@ fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () 
 }
 
 fn main() -> std::io::Result<()> {
+    // Setting up a duration, can be used to slow down the process
     let five_hundred_millis = Duration::from_millis(500);
     let now = Instant::now();
 
@@ -119,7 +197,9 @@ fn main() -> std::io::Result<()> {
         spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, poll_period));
     }
 
-    let mut dirn = e::DIRN_DOWN; // Set mutex direction
+
+    
+    let mut dirn = e::DIRN_DOWN; // Set mutable direction
     // If the elevator is not on a floor, send it down
     elevator.motor_direction(dirn);
     println!("På vei ned");
@@ -127,59 +207,120 @@ fn main() -> std::io::Result<()> {
 
     let mut last_floor: u8 = elev_num_floors+1;
 
-    let mut order_list = HashSet::new();
-    let mut destination_list = HashSet::from([0]);
-
+    // Setting up sets with Rwlock
+    // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
+    let mut order_list = RwLock::from(HashSet::new());
+    let mut destination_list = RwLock::from(HashSet::from([0]));
 
     loop {
         cbc::select! {
+            // This only starts when button press is registered
             recv(call_button_rx) -> a => { // Get info from call button and add it to the list of floors ordered
                 let call_button = a.unwrap();
-                println!("{:#?}", call_button);
-                elevator.call_button_light(call_button.floor, call_button.call, true);
+                //println!("{:#?}", call_button);
                 let new_order = Order {
                     floor_number: call_button.floor,
                     direction: call_button.call,
                     status: WAITING,
                 };
-
-                order_list.insert(new_order);
+                if new_order.direction == e::CAB && new_order.floor_number != last_floor {
+                    let mut order_list_w = order_list.write().unwrap();
+                    order_list_w.insert(new_order);
+                    elevator.call_button_light(call_button.floor, call_button.call, true);
+                }
+                else if new_order.direction == e::HALL_UP || new_order.direction == e::HALL_DOWN {
+                    let mut order_list_w = order_list.write().unwrap();
+                    order_list_w.insert(new_order);
+                    elevator.call_button_light(call_button.floor, call_button.call, true);
+                }
+                
                 //print_order(&new_order);
             
             }
         
-
+            // This only starts when new floor is detected
             recv(floor_sensor_rx) -> a => { // Get floor status and save last floor for later use
                 let floor = a.unwrap();
-                println!("Floor: {:#?}", floor);
+                //println!("Floor: {:#?}", floor);
+                last_floor = floor;
+                //println!("Last floor updated to: {:#?}", last_floor);
+                check_lights(&elevator, dirn, floor, elev_num_floors);
 
-                if elevator.floor_sensor().is_some() {
-                    last_floor = floor;
-                    println!("Last floor updated to: {:#?}", last_floor);
-                    check_lights(&elevator, dirn, floor, elev_num_floors);
-                }
+                let mut destination_list_w = destination_list.write().unwrap();
                 
-                if destination_list.contains(&floor){
+                if destination_list_w.contains(&floor){
                     elevator.motor_direction(e::DIRN_STOP);
                     println!("Stopper midlertidig");
-                    destination_list.remove(&floor);
+                    destination_list_w.remove(&floor);
+                    elevator.door_light(true);
                     sleep(five_hundred_millis);
                     assert!(now.elapsed() >= five_hundred_millis);
-                    if destination_list.is_empty() {
+                    elevator.door_light(false);
+                    if destination_list_w.is_empty(){
                         dirn = e::DIRN_STOP;
                     }
-                    else {
+                    elevator.motor_direction(dirn);
+                    println!("Fortsetter");
+                    
+                }
+                if dirn == e::DIRN_UP && floor == (elev_num_floors-1) {
+                    dirn = e::DIRN_STOP;
+                    elevator.motor_direction(dirn);
+                    if !destination_list_w.is_empty() {
+                        dirn = e::DIRN_DOWN;
                         elevator.motor_direction(dirn);
-                        println!("Fortsetter");
                     }
                 }
+                else if dirn == e::DIRN_DOWN && floor == 0 {
+                    dirn = e::DIRN_STOP;
+                    elevator.motor_direction(dirn);
+                    if !destination_list_w.is_empty() {
+                        dirn = e::DIRN_UP;
+                        elevator.motor_direction(dirn);
+                    }
+                }
+
+
+                
                 
 
                 
             }
+            // This function polls continuously
+            default(poll_period) => {
+                //  Unlocking Rw locked lists
+                let mut order_list_w = order_list.write().unwrap();
+                let mut destination_list_w = destination_list.write().unwrap();
+
+                // Calling order scheduler
+                let out = commute_orders(&order_list_w, &destination_list_w, last_floor, &dirn, &elevator, elev_num_floors);
+
+                // Overwriting old variables with new modified ones
+                *order_list_w = out.0;
+                *destination_list_w = out.1;
+                dirn = out.2;
+
+                // Status update readout
+                println!("-------Status---------");
+                println!("Destinasjoner: {:#?}", destination_list_w);
+                match dirn{
+                    e::DIRN_DOWN => {
+                        println!("Retning: Ned");
+                    }
+                    e::DIRN_UP => {
+                        println!("Retning: Opp");
+                    }
+                    e::DIRN_STOP => {
+                        println!("Retning: Stoppet");
+                    }
+                    2_u8..=254_u8 => {
+                        println!("Noe har gått kraftig galt");
+                    }
+                }
+                println!("-------Slutt----------");
+            }
+            
         }
-        let out = commute_orders(&order_list, &destination_list, last_floor, &dirn, &elevator);
-        order_list = out.0;
-        destination_list = out.1;
+        
     }
 }
