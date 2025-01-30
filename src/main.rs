@@ -33,6 +33,58 @@ fn print_order(order: &Order) -> () {
 
 }
 
+fn commute_orders(order_list: &HashSet<Order>, destination_list: &HashSet<u8>, last_floor: u8, dirn: &u8, elevator: &Elevator) -> (HashSet<Order>, HashSet<u8>) {
+    let mut order_list_copy = order_list.clone();
+    let mut destination_list_copy = destination_list.clone();
+    let mut dirn_copy = dirn.clone();
+
+    let mut orders_to_remove = HashSet::new();
+    for element in order_list {
+        if (element.direction == 0 || element.direction == 2) && dirn_copy == e::DIRN_UP && element.floor_number > last_floor {
+            destination_list_copy.insert(element.floor_number);
+            orders_to_remove.insert(element);
+        }
+        else if (element.direction == 1 || element.direction == 2) && dirn_copy == e::DIRN_DOWN && element.floor_number < last_floor {
+            destination_list_copy.insert(element.floor_number);
+            orders_to_remove.insert(element);
+        }
+        else if dirn_copy == e::DIRN_STOP {
+            destination_list_copy.insert(element.floor_number);
+            orders_to_remove.insert(element);
+            if element.floor_number > last_floor {
+                dirn_copy = e::DIRN_UP;
+                elevator.motor_direction(dirn_copy);
+                println!("Kjører opp")
+            }
+            else if element.floor_number < last_floor {
+                dirn_copy = e::DIRN_DOWN;
+                elevator.motor_direction(dirn_copy);
+                println!("Kjører ned")
+            }
+        }
+    }
+    for element in &orders_to_remove {
+        order_list_copy.remove(element);
+    }
+
+    return (order_list_copy, destination_list_copy);
+
+}
+
+fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () {
+    elevator.call_button_light(floor, e::CAB, false);
+    if dirn == e::DIRN_DOWN || floor == (num_floors-1) {
+        elevator.call_button_light(floor, e::HALL_DOWN, false);
+    }
+    else if dirn == e::DIRN_UP || floor == 0 {
+        elevator.call_button_light(floor, e::HALL_UP, false);
+    }
+    else if dirn == e::DIRN_STOP {
+        elevator.call_button_light(floor, e::HALL_DOWN, false);
+        elevator.call_button_light(floor, e::HALL_UP, false);
+    }
+}
+
 fn main() -> std::io::Result<()> {
     let five_hundred_millis = Duration::from_millis(500);
     let now = Instant::now();
@@ -104,17 +156,7 @@ fn main() -> std::io::Result<()> {
                 if elevator.floor_sensor().is_some() {
                     last_floor = floor;
                     println!("Last floor updated to: {:#?}", last_floor);
-                    elevator.call_button_light(floor, e::CAB, false);
-                    if dirn == e::DIRN_DOWN || floor == (elev_num_floors-1) {
-                        elevator.call_button_light(floor, e::HALL_DOWN, false);
-                    }
-                    else if dirn == e::DIRN_UP || floor == 0 {
-                        elevator.call_button_light(floor, e::HALL_UP, false);
-                    }
-                    else if dirn == e::DIRN_STOP {
-                        elevator.call_button_light(floor, e::HALL_DOWN, false);
-                        elevator.call_button_light(floor, e::HALL_UP, false);
-                    }
+                    check_lights(&elevator, dirn, floor, elev_num_floors);
                 }
                 
                 if destination_list.contains(&floor){
@@ -136,56 +178,8 @@ fn main() -> std::io::Result<()> {
                 
             }
         }
-        let mut orders_added = HashSet::new();
-        for element in &order_list {
-            if (element.direction == 0 || element.direction == 2) && dirn == e::DIRN_UP && element.floor_number > last_floor {
-                destination_list.insert(element.floor_number);
-                let new_order = Order {
-                    floor_number: element.floor_number,
-                    direction: element.direction,
-                    status: element.status,
-                };
-                orders_added.insert(new_order);
-            }
-            else if (element.direction == 1 || element.direction == 2) && dirn == e::DIRN_DOWN && element.floor_number < last_floor {
-                destination_list.insert(element.floor_number);
-                let new_order = Order {
-                    floor_number: element.floor_number,
-                    direction: element.direction,
-                    status: element.status,
-                };
-                orders_added.insert(new_order);
-            }
-            else if dirn == e::DIRN_STOP {
-                destination_list.insert(element.floor_number);
-                let new_order = Order {
-                    floor_number: element.floor_number,
-                    direction: element.direction,
-                    status: element.status,
-                };
-                orders_added.insert(new_order);
-                if element.floor_number > last_floor {
-                    dirn = e::DIRN_UP;
-                    elevator.motor_direction(dirn);
-                    println!("Kjører opp")
-                }
-                else if element.floor_number < last_floor {
-                    dirn = e::DIRN_DOWN;
-                    elevator.motor_direction(dirn);
-                    println!("Kjører ned")
-                }
-            }
-        }
-        let almost_final_orders = order_list.difference(&orders_added).collect::<HashSet<_>>();
-        let mut final_orders = HashSet::new();
-        for element in &almost_final_orders {
-            let new_order = Order {
-                floor_number: element.floor_number,
-                direction: element.direction,
-                status: element.status,
-            };
-            final_orders.insert(new_order);
-        }
-        order_list = final_orders;
+        let out = commute_orders(&order_list, &destination_list, last_floor, &dirn, &elevator);
+        order_list = out.0;
+        destination_list = out.1;
     }
 }
