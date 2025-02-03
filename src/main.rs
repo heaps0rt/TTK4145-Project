@@ -324,7 +324,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                     println!("Fortsetter");
                     
                 }
-                /* if dirn == e::DIRN_UP && floor == (elev_num_floors-1) {
+                 if dirn == e::DIRN_UP && floor == (elev_num_floors-1) {
                     dirn = e::DIRN_STOP;
                     elevator.motor_direction(dirn);
                     if !destination_list_w.is_empty() {
@@ -339,7 +339,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                         dirn = e::DIRN_UP;
                         elevator.motor_direction(dirn);
                     }
-                } */
+                }
             }
             // This function polls continuously
             default(a_hundred_millis) => {
