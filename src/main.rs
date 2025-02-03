@@ -49,6 +49,7 @@ pub const ORDER_ACK: u8 = 2;
 #[derive(PartialEq, Eq, Hash, Copy, Clone)]
 pub struct Communication {
     pub sender: u8,
+    pub target: u8,
     pub comm_type: u8,
     pub status: Option<Status>,
     pub order: Option<Order>
@@ -69,6 +70,66 @@ fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () 
     }
 }
 
+fn order_up(comms_channel_tx: Sender<Communication>, order_list_w_copy: HashSet<Order>, status_list: &RwLockWriteGuard<'_, Vec<Status>>) -> () {
+    for element in &order_list_w_copy {
+        match status_list[0 as usize].direction {
+            DIRN_STOP => {
+                let new_message = Communication {
+                    sender: u8::MAX,
+                    target: 0,
+                    comm_type: ORDER_TRANSFER,
+                    order: Some(*element),
+                    status: Some(Status {
+                        last_floor: 0,
+                        direction: DIRN_STOP,
+                        errors: false,
+                        obstructions: false
+                    })
+                };
+                comms_channel_tx.send(new_message).unwrap();
+                
+            }
+            DIRN_UP => {
+                if element.floor_number > status_list[0 as usize].last_floor {
+                    let new_message = Communication {
+                        sender: u8::MAX,
+                        target: 0,
+                        comm_type: ORDER_TRANSFER,
+                        order: Some(*element),
+                        status: Some(Status {
+                            last_floor: 0,
+                            direction: DIRN_STOP,
+                            errors: false,
+                            obstructions: false
+                        })
+                    };
+                    comms_channel_tx.send(new_message).unwrap();
+                }
+            }
+            DIRN_DOWN => {
+                if element.floor_number < status_list[0 as usize].last_floor {
+                    let new_message = Communication {
+                        sender: u8::MAX,
+                        target: 0,
+                        comm_type: ORDER_TRANSFER,
+                        order: Some(*element),
+                        status: Some(Status {
+                            last_floor: 0,
+                            direction: DIRN_STOP,
+                            errors: false,
+                            obstructions: false
+                        })
+                    };
+                    comms_channel_tx.send(new_message).unwrap();
+                }
+            }
+            2_u8..=254_u8 => {
+                println!("Error in status")
+            }
+        }
+    }
+}
+
 fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, comms_channel_tx: Sender<Communication>, comms_channel_rx: Receiver<Communication>) -> () {
 
     // Setting up durations for later use
@@ -83,12 +144,6 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
     // Setting up set with Rwlock
     // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
     let mut order_list = RwLock::from(HashSet::new());
-    let new_status = Status {
-        last_floor: u8::MAX,
-        direction: e::DIRN_STOP,
-        errors: false,
-        obstructions: false
-    };
     let mut status_list = RwLock::from(Vec::new());
     let mut elevator_direction = e::DIRN_STOP;
 
@@ -110,31 +165,40 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
             }
             recv(comms_channel_rx) -> a => {
                 let message = a.unwrap();
-                match message.comm_type {
-                    STATUS_MESSAGE => {
-                        let mut status_list_w = status_list.write().unwrap();
-                        status_list_w[message.sender as usize] = message.status.unwrap();
-                    }
-                    ORDER_TRANSFER => {
-                        // Message is not for me
-                    }
-                    ORDER_ACK => {
-                        let mut order_list_w = order_list.write().unwrap();
-                        if order_list_w.contains(&message.order.unwrap()) {
-                            order_list_w.remove(&message.order.unwrap());
+                if message.target == u8::MAX {
+                    match message.comm_type {
+                        STATUS_MESSAGE => {
+                            let mut status_list_w = status_list.write().unwrap();
+                            status_list_w[message.sender as usize] = message.status.unwrap();
                         }
-                        else {
-                            println!("Feil i ack av order")
+                        ORDER_TRANSFER => {
+                            // Message is not for me
                         }
-                    }
-                    3_u8..=u8::MAX => {
-                        println!("Feil i meldingssending")
+                        ORDER_ACK => {
+                            let mut order_list_w = order_list.write().unwrap();
+                            if order_list_w.contains(&message.order.unwrap()) {
+                                order_list_w.remove(&message.order.unwrap());
+                            }
+                            else {
+                                println!("Feil i ack av order")
+                            }
+                        }
+                        3_u8..=u8::MAX => {
+                            println!("Feil i meldingssending")
+                        }
                     }
                 }
             }
             // This function polls continuously
             default(a_hundred_millis) => {
-                //Ordering function goes here
+                //Ordering function
+                let mut status_list_w = status_list.write().unwrap();
+                if !status_list_w.is_empty(){
+                    let mut order_list_w = order_list.write().unwrap();
+                    let mut order_list_w_copy = order_list_w.clone();
+                    let comms_channel_tx = comms_channel_tx.clone();
+                    order_up(comms_channel_tx, order_list_w_copy, &status_list_w);
+                }
 
                 
             }
@@ -254,24 +318,26 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
             }
             recv(comms_channel_rx) -> a => {
                 let message = a.unwrap();
-                match message.comm_type {
-                    STATUS_MESSAGE => {
-                        // Message is not for me
-                    }
-                    ORDER_TRANSFER => {
-                        let new_order = message.order.unwrap();
+                if message.target == 0 {
+                    match message.comm_type {
+                        STATUS_MESSAGE => {
+                            // Message is not for me
+                        }
+                        ORDER_TRANSFER => {
+                            let new_order = message.order.unwrap();
 
-                        let mut destination_list_w = destination_list.write().unwrap();
-                        destination_list_w.insert(new_order.floor_number);
-                        let mut new_message = message;
-                        new_message.comm_type = ORDER_ACK;
-                        comms_channel_tx.send(new_message).unwrap();
-                    }
-                    ORDER_ACK => {
-                        // Message is not for me
-                    }
-                    3_u8..=u8::MAX => {
-                        println!("Feil i meldingssending")
+                            let mut destination_list_w = destination_list.write().unwrap();
+                            destination_list_w.insert(new_order.floor_number);
+                            let mut new_message = message;
+                            new_message.comm_type = ORDER_ACK;
+                            comms_channel_tx.send(new_message).unwrap();
+                        }
+                        ORDER_ACK => {
+                            // Message is not for me
+                        }
+                        3_u8..=u8::MAX => {
+                            println!("Feil i meldingssending")
+                        }
                     }
                 }
             }
@@ -303,6 +369,10 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
 }
 
 fn main() -> std::io::Result<()> {
+    // Setting up durations for later use
+    let a_hundred_millis = Duration::from_millis(100);
+    let five_hundred_millis = Duration::from_millis(500);
+    let now = Instant::now();
     
     let elev_num_floors = 4; // Set floor count
     let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?; // Initialize and connect elevator
@@ -354,5 +424,8 @@ fn main() -> std::io::Result<()> {
         }
 
     } */
-   Ok(())
+   loop {
+    sleep(five_hundred_millis);
+    assert!(now.elapsed() >= five_hundred_millis);
+   }
 }
