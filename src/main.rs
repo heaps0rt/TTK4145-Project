@@ -1,3 +1,4 @@
+use std::default;
 use std::thread::*;
 use std::time::*;
 use std::collections::HashSet;
@@ -163,7 +164,8 @@ fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () 
 }
 
 fn main() -> std::io::Result<()> {
-    // Setting up a duration, can be used to slow down the process
+    // Setting up durations for later use
+    let a_hundred_millis = Duration::from_millis(100);
     let five_hundred_millis = Duration::from_millis(500);
     let now = Instant::now();
 
@@ -278,16 +280,10 @@ fn main() -> std::io::Result<()> {
                         dirn = e::DIRN_UP;
                         elevator.motor_direction(dirn);
                     }
-                }
-
-
-                
-                
-
-                
+                }    
             }
             // This function polls continuously
-            default(poll_period) => {
+            default(a_hundred_millis) => {
                 //  Unlocking Rw locked lists
                 let mut order_list_w = order_list.write().unwrap();
                 let mut destination_list_w = destination_list.write().unwrap();
