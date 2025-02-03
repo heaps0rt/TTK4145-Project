@@ -20,24 +20,16 @@ use driver_rust::elevio::elev as e;
 use driver_rust::elevio::poll;
 use driver_rust::elevio::poll::CallButton;
 
-// Const variables for use with orders
-pub const WAITING: u8 = 0;
-pub const SENT: u8 = 1;
-pub const ACK: u8 = 2;
-
 #[derive(PartialEq, Eq, Hash, Copy, Clone)]
 pub struct Order {
     pub floor_number: u8,
-    pub direction: u8,
-    pub status: u8,
+    pub direction: u8
 }
 fn print_order(order: &Order) -> () {
     let floor = order.floor_number;
     let direction = order.direction;
-    let status = order.status;
     println!("Floor: \n{:#?}", floor);
     println!("Direction: \n{:#?}", direction);
-    println!("Status: \n{:#?}", status);
 
 }
 
@@ -56,120 +48,10 @@ pub const ORDER_ACK: u8 = 2;
 
 #[derive(PartialEq, Eq, Hash, Copy, Clone)]
 pub struct Communication {
+    pub sender: u8,
     pub comm_type: u8,
     pub status: Option<Status>,
     pub order: Option<Order>
-
-}
-
-// The big ordering function. Turns orders on the order list into destinations for the elevator.
-fn commute_orders(order_list: &HashSet<Order>, destination_list: &HashSet<u8>, last_floor: u8, dirn: &u8, elevator: &Elevator, elev_num_floors: u8) -> (HashSet<Order>, HashSet<u8>, u8) {
-    // Copying variables to keep owner control happy
-    let mut order_list_copy = order_list.clone();
-    let mut destination_list_copy = destination_list.clone();
-    let mut dirn_copy = dirn.clone();
-    // Creating a set to remove later
-    let mut orders_to_remove = HashSet::new();
-    for element in &order_list_copy {
-        match dirn_copy {
-            e::DIRN_UP => {
-                match element.direction {
-                    e::HALL_UP|e::CAB => {
-                        if element.floor_number > last_floor {
-                            // Adding to destinations and scheduling removal from orders
-                            destination_list_copy.insert(element.floor_number);
-                            orders_to_remove.insert(element);
-                        }
-                    }
-                    e::HALL_DOWN => {
-                        if element.floor_number == (elev_num_floors-1) {
-                            // Adding to destinations and scheduling removal from orders
-                            destination_list_copy.insert(element.floor_number);
-                            orders_to_remove.insert(element);
-                        }
-                    }
-                    3_u8..=u8::MAX => {
-                        println!("Noe har gått kraftig galt");
-                    }
-                }
-            }
-            e::DIRN_DOWN => {
-                match element.direction {
-                    e::HALL_DOWN|e::CAB => {
-                        if element.floor_number < last_floor {
-                            // Adding to destinations and scheduling removal from orders
-                            destination_list_copy.insert(element.floor_number);
-                            orders_to_remove.insert(element);
-                        }
-                    }
-                    e::HALL_UP => {
-                        if element.floor_number == 0 {
-                            // Adding to destinations and scheduling removal from orders
-                            destination_list_copy.insert(element.floor_number);
-                            orders_to_remove.insert(element);
-                        }
-                    }
-                    3_u8..=u8::MAX => {
-                        println!("Noe har gått kraftig galt");
-                    }
-                }
-            }
-            e::DIRN_STOP => {
-                // Adding to destinations and scheduling removal from orders
-                destination_list_copy.insert(element.floor_number);
-                orders_to_remove.insert(element);
-                // Restarting elevator
-                if element.floor_number < last_floor {
-                    dirn_copy = e::DIRN_DOWN;
-                    elevator.motor_direction(dirn_copy);
-                }
-                else if element.floor_number > last_floor {
-                    dirn_copy = e::DIRN_UP;
-                    elevator.motor_direction(dirn_copy);
-                }
-                break; // Breaking out so only one order is added
-            }
-            2_u8..=254_u8 => {
-                println!("Noe har gått kraftig galt");
-            }
-        }
-        // Removing unneccesary orders
-        if element.floor_number == last_floor {
-            match element.direction {
-                e::HALL_DOWN => {
-                    if dirn_copy == e::DIRN_DOWN {
-                        // Scheduling deletion of order
-                        orders_to_remove.insert(element);
-                        elevator.call_button_light(last_floor, e::HALL_DOWN, false);
-                    }
-                }
-                e::HALL_UP => {
-                    if dirn_copy == e::DIRN_UP {
-                        // Scheduling deletion of order
-                        orders_to_remove.insert(element);
-                        elevator.call_button_light(last_floor, e::HALL_UP, false);
-                    }
-                }
-                e::CAB => {
-                    // Scheduling deletion of order
-                    orders_to_remove.insert(element);
-                    elevator.call_button_light(last_floor, e::CAB, false);
-                }
-                3_u8..=u8::MAX => {
-                    println!("Noe har gått kraftig galt");
-                }
-            }
-        }
-    }
-    // Copying a copy to be able to use it in the for loop
-    let mut order_list_copy_copy = order_list_copy.clone();
-    // Removing scheduled orders from the order list we will return
-    for element in &orders_to_remove {
-        order_list_copy_copy.remove(element);
-    }
-
-    // Returning values for further use
-    return (order_list_copy_copy, destination_list_copy, dirn_copy);
 
 }
 
@@ -201,7 +83,13 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
     // Setting up set with Rwlock
     // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
     let mut order_list = RwLock::from(HashSet::new());
-    let mut status_list = RwLock::from(HashSet::<Status>::new());
+    let new_status = Status {
+        last_floor: u8::MAX,
+        direction: e::DIRN_STOP,
+        errors: false,
+        obstructions: false
+    };
+    let mut status_list = RwLock::from(Vec::new());
     let mut elevator_direction = e::DIRN_STOP;
 
     loop {
@@ -211,8 +99,7 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
                 if call_button.floor == e::HALL_DOWN | HALL_UP {
                     let new_order = Order {
                         floor_number: call_button.floor,
-                        direction: call_button.call,
-                        status: WAITING,
+                        direction: call_button.call
                     };
                     let mut order_list_w = order_list.write().unwrap();
                     order_list_w.insert(new_order);
@@ -220,6 +107,30 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
 
                 }
         
+            }
+            recv(comms_channel_rx) -> a => {
+                let message = a.unwrap();
+                match message.comm_type {
+                    STATUS_MESSAGE => {
+                        let mut status_list_w = status_list.write().unwrap();
+                        status_list_w[message.sender as usize] = message.status.unwrap();
+                    }
+                    ORDER_TRANSFER => {
+                        // Message is not for me
+                    }
+                    ORDER_ACK => {
+                        let mut order_list_w = order_list.write().unwrap();
+                        if order_list_w.contains(&message.order.unwrap()) {
+                            order_list_w.remove(&message.order.unwrap());
+                        }
+                        else {
+                            println!("Feil i ack av order")
+                        }
+                    }
+                    3_u8..=u8::MAX => {
+                        println!("Feil i meldingssending")
+                    }
+                }
             }
             // This function polls continuously
             default(a_hundred_millis) => {
@@ -338,6 +249,29 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                     if !destination_list_w.is_empty() {
                         dirn = e::DIRN_UP;
                         elevator.motor_direction(dirn);
+                    }
+                }
+            }
+            recv(comms_channel_rx) -> a => {
+                let message = a.unwrap();
+                match message.comm_type {
+                    STATUS_MESSAGE => {
+                        // Message is not for me
+                    }
+                    ORDER_TRANSFER => {
+                        let new_order = message.order.unwrap();
+
+                        let mut destination_list_w = destination_list.write().unwrap();
+                        destination_list_w.insert(new_order.floor_number);
+                        let mut new_message = message;
+                        new_message.comm_type = ORDER_ACK;
+                        comms_channel_tx.send(new_message).unwrap();
+                    }
+                    ORDER_ACK => {
+                        // Message is not for me
+                    }
+                    3_u8..=u8::MAX => {
+                        println!("Feil i meldingssending")
                     }
                 }
             }
