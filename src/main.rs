@@ -6,6 +6,7 @@ use std::u8;
 use std::sync::*;
 
 use crossbeam_channel::Receiver;
+use crossbeam_channel::Sender;
 use crossbeam_channel as cbc;
 
 use driver_rust::elevio;
@@ -19,6 +20,7 @@ use driver_rust::elevio::elev as e;
 use driver_rust::elevio::poll;
 use driver_rust::elevio::poll::CallButton;
 
+// Const variables for use with orders
 pub const WAITING: u8 = 0;
 pub const SENT: u8 = 1;
 pub const ACK: u8 = 2;
@@ -36,6 +38,27 @@ fn print_order(order: &Order) -> () {
     println!("Floor: \n{:#?}", floor);
     println!("Direction: \n{:#?}", direction);
     println!("Status: \n{:#?}", status);
+
+}
+
+#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
+pub struct Status {
+    pub last_floor: u8,
+    pub direction: u8,
+    pub errors: bool, // Yes or no, any errors
+    pub obstructions: bool // Yes or no, any obstructions
+}
+
+// Const variables for use in comms
+pub const STATUS_MESSAGE: u8 = 0;
+pub const ORDER_TRANSFER: u8 = 1;
+pub const ORDER_ACK: u8 = 2;
+
+#[derive(PartialEq, Eq, Hash, Copy, Clone)]
+pub struct Communication {
+    pub comm_type: u8,
+    pub status: Option<Status>,
+    pub order: Option<Order>
 
 }
 
@@ -164,7 +187,7 @@ fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () 
     }
 }
 
-fn runMaster(elev_num_floors: u8, elevator: Elevator, poll_period: Duration) -> () {
+fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, comms_channel_tx: Sender<Communication>, comms_channel_rx: Receiver<Communication>) -> () {
 
     // Setting up durations for later use
     let a_hundred_millis = Duration::from_millis(100);
@@ -178,7 +201,7 @@ fn runMaster(elev_num_floors: u8, elevator: Elevator, poll_period: Duration) -> 
     // Setting up set with Rwlock
     // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
     let mut order_list = RwLock::from(HashSet::new());
-    let mut status_list = RwLock::from(HashSet::from([0]));
+    let mut status_list = RwLock::from(HashSet::<Status>::new());
     let mut elevator_direction = e::DIRN_STOP;
 
     loop {
@@ -200,31 +223,15 @@ fn runMaster(elev_num_floors: u8, elevator: Elevator, poll_period: Duration) -> 
             }
             // This function polls continuously
             default(a_hundred_millis) => {
-                // Status update readout
-                let status_list_w = status_list.write().unwrap();
-                println!("-------Status---------");
-                println!("Destinasjoner: {:#?}", status_list_w);
-                match elevator_direction{
-                    e::DIRN_DOWN => {
-                        println!("Retning: Ned");
-                    }
-                    e::DIRN_UP => {
-                        println!("Retning: Opp");
-                    }
-                    e::DIRN_STOP => {
-                        println!("Retning: Stoppet");
-                    }
-                    2_u8..=254_u8 => {
-                        println!("Noe har gått kraftig galt");
-                    }
-                }
-                println!("-------Slutt----------");
+                //Ordering function goes here
+
+                
             }
         }
     }
 }
 
-fn runElevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration) -> () {
+fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, comms_channel_tx: Sender<Communication>, comms_channel_rx: Receiver<Communication>) -> () {
 
     // Setting up durations for later use
     let a_hundred_millis = Duration::from_millis(100);
@@ -304,10 +311,12 @@ fn runElevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration) -
                     elevator.motor_direction(e::DIRN_STOP);
                     println!("Stopper midlertidig");
                     destination_list_w.remove(&floor);
+
                     elevator.door_light(true);
                     sleep(five_hundred_millis);
                     assert!(now.elapsed() >= five_hundred_millis);
                     elevator.door_light(false);
+
                     if destination_list_w.is_empty(){
                         dirn = e::DIRN_STOP;
                     }
@@ -315,7 +324,7 @@ fn runElevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration) -
                     println!("Fortsetter");
                     
                 }
-                if dirn == e::DIRN_UP && floor == (elev_num_floors-1) {
+                /* if dirn == e::DIRN_UP && floor == (elev_num_floors-1) {
                     dirn = e::DIRN_STOP;
                     elevator.motor_direction(dirn);
                     if !destination_list_w.is_empty() {
@@ -330,11 +339,30 @@ fn runElevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration) -
                         dirn = e::DIRN_UP;
                         elevator.motor_direction(dirn);
                     }
-                }
+                } */
             }
             // This function polls continuously
             default(a_hundred_millis) => {
 
+                // Status update readout
+                let destination_list_w = destination_list.write().unwrap();
+                println!("-------Status---------");
+                println!("Destinasjoner: {:#?}", destination_list_w);
+                match dirn{
+                    e::DIRN_DOWN => {
+                        println!("Retning: Ned");
+                    }
+                    e::DIRN_UP => {
+                        println!("Retning: Opp");
+                    }
+                    e::DIRN_STOP => {
+                        println!("Retning: Stoppet");
+                    }
+                    2_u8..=254_u8 => {
+                        println!("Noe har gått kraftig galt");
+                    }
+                }
+                println!("-------Slutt----------");
             }
         }
     }
@@ -342,25 +370,32 @@ fn runElevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration) -
 
 fn main() -> std::io::Result<()> {
     
-
     let elev_num_floors = 4; // Set floor count
     let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?; // Initialize and connect elevator
     println!("Elevator started:\n{:#?}", elevator);
 
+    let (comms_channel_tx, comms_channel_rx) = cbc::unbounded(); // communication channel
+
     let poll_period = Duration::from_millis(25); // Set poll period for buttons and sensors
     {
     let elevator = elevator.clone();
-    let master = spawn(move || {
-        runMaster(elev_num_floors, elevator, poll_period);
+    let comms_channel_tx = comms_channel_tx.clone();
+    let comms_channel_rx = comms_channel_rx.clone();
+    spawn(move || {
+        run_master(elev_num_floors, elevator, poll_period, comms_channel_tx, comms_channel_rx);
     });
     }
 
     {
+    // Cloning critical variables
+    // Note that for all of these, cloning only creates a seperate handle, not a new variable
     let elevator = elevator.clone();
-    let elevator1 = spawn(move || {
-        runElevator(elev_num_floors, elevator, poll_period);
+    let comms_channel_tx = comms_channel_tx.clone();
+    let comms_channel_rx = comms_channel_rx.clone();
+    spawn(move || {
+        run_elevator(elev_num_floors, elevator, poll_period, comms_channel_tx, comms_channel_rx);
     });
-    }  
+    }
     
 
     /* loop {
@@ -385,7 +420,5 @@ fn main() -> std::io::Result<()> {
         }
 
     } */
-   loop {
-
-   }
+   Ok(())
 }
