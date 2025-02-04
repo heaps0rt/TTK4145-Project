@@ -95,71 +95,7 @@ fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () 
 fn order_up(comms_channel_tx: Sender<Communication>, order_list_w_copy: HashSet<Order>, status_list: &RwLockReadGuard<'_, Vec<Status>>) -> () {
     let mut sent_direction: u8 = u8::MAX;
     for element in &order_list_w_copy {
-        match status_list[0 as usize].direction {
-            DIRN_STOP => {
-                if sent_direction == u8::MAX && element.floor_number != status_list[0 as usize].last_floor {
-                    let new_message = Communication {
-                        sender: u8::MAX,
-                        target: 0,
-                        comm_type: ORDER_TRANSFER,
-                        order: Some(*element),
-                        status: Some(status_list[0 as usize])
-                    };
-                    comms_channel_tx.send(new_message).unwrap();
-                    sent_direction = element.direction;
-                }
-                else if sent_direction == element.direction {
-                    if sent_direction == DIRN_DOWN && element.floor_number < status_list[0 as usize].last_floor {
-                        let new_message = Communication {
-                            sender: u8::MAX,
-                            target: 0,
-                            comm_type: ORDER_TRANSFER,
-                            order: Some(*element),
-                            status: Some(status_list[0 as usize])
-                        };
-                        comms_channel_tx.send(new_message).unwrap();
-                    }
-                    else if sent_direction == DIRN_UP && element.floor_number > status_list[0 as usize].last_floor {
-                        let new_message = Communication {
-                            sender: u8::MAX,
-                            target: 0,
-                            comm_type: ORDER_TRANSFER,
-                            order: Some(*element),
-                            status: Some(status_list[0 as usize])
-                        };
-                        comms_channel_tx.send(new_message).unwrap();
-                    }
-                }
-                
-            }
-            DIRN_UP => {
-                if element.floor_number > status_list[0 as usize].last_floor {
-                    let new_message = Communication {
-                        sender: u8::MAX,
-                        target: 0,
-                        comm_type: ORDER_TRANSFER,
-                        order: Some(*element),
-                        status: Some(status_list[0 as usize])
-                    };
-                    comms_channel_tx.send(new_message).unwrap();
-                }
-            }
-            DIRN_DOWN => {
-                if element.floor_number < status_list[0 as usize].last_floor {
-                    let new_message = Communication {
-                        sender: u8::MAX,
-                        target: 0,
-                        comm_type: ORDER_TRANSFER,
-                        order: Some(*element),
-                        status: Some(status_list[0 as usize])
-                    };
-                    comms_channel_tx.send(new_message).unwrap();
-                }
-            }
-            2_u8..=254_u8 => {
-                println!("Error in status")
-            }
-        }
+
     }
 }
 
@@ -292,7 +228,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
 
     // Setting up destination set with Rwlock
     // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
-    let mut destination_list = RwLock::from(HashSet::from([0]));
+    let mut destination_list:RwLock<HashSet<Order>> = RwLock::from(HashSet::new());
 
     // The main running loop of the elevator
     loop {
@@ -303,36 +239,26 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
             recv(call_button_rx) -> a => { 
                 let call_button = a.unwrap();
                 if call_button.call == e::CAB {
-                    match dirn {
-                        e::DIRN_DOWN => {
-                            if call_button.floor < last_floor {
-                                let mut destination_list_w = destination_list.write().unwrap();
-                                destination_list_w.insert(call_button.floor);
-                                elevator.call_button_light(call_button.floor, call_button.call, true);
-                                sleep(Duration::from_millis(100));
-                            }
-                        }
-                        e::DIRN_UP => {
-                            if call_button.floor > last_floor {
-                                let mut destination_list_w = destination_list.write().unwrap();
-                                destination_list_w.insert(call_button.floor);
-                                elevator.call_button_light(call_button.floor, call_button.call, true);
-                                sleep(Duration::from_millis(100));
-                            }
-                        }
-                        e::DIRN_STOP => {
-                            if call_button.floor != last_floor {
-                                let mut destination_list_w = destination_list.write().unwrap();
-                                destination_list_w.insert(call_button.floor);
-                                elevator.call_button_light(call_button.floor, call_button.call, true);
-                                sleep(Duration::from_millis(100));
-                            }
-                        }
-                        2_u8..=254_u8 => {
-                            println!("Error in cab order")
-                        }
+                    if call_button.floor < last_floor {
+                        let new_order = Order {
+                            floor_number: call_button.floor,
+                            direction: e::HALL_DOWN
+                        };
+                        let mut destination_list_w = destination_list.write().unwrap();
+                        destination_list_w.insert(new_order);
+                        elevator.call_button_light(call_button.floor, call_button.call, true);
+                        sleep(Duration::from_millis(100));
                     }
-                    
+                    else if call_button.floor >= last_floor {
+                        let new_order = Order {
+                            floor_number: call_button.floor,
+                            direction: e::HALL_UP
+                        };
+                        let mut destination_list_w = destination_list.write().unwrap();
+                        destination_list_w.insert(new_order);
+                        elevator.call_button_light(call_button.floor, call_button.call, true);
+                        sleep(Duration::from_millis(100));
+                    }  
                 }
             }
             // Get floor status and save last floor for later use
@@ -341,14 +267,17 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                 //println!("Floor: {:#?}", floor);
                 last_floor = floor;
                 //println!("Last floor updated to: {:#?}", last_floor);
-                check_lights(&elevator, dirn, floor, elev_num_floors);
 
                 let mut destination_list_w = destination_list.write().unwrap();
-                
-                if destination_list_w.contains(&floor){
+
+                let order_check = Order {
+                    floor_number: floor,
+                    direction: dirn
+                };
+                if destination_list_w.contains(&order_check){
                     elevator.motor_direction(e::DIRN_STOP);
                     println!("Stopper midlertidig");
-                    destination_list_w.remove(&floor);
+                    destination_list_w.remove(&order_check);
 
                     elevator.door_light(true);
                     sleep(Duration::from_millis(500));
@@ -369,6 +298,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                     dirn = e::DIRN_STOP;
                     elevator.motor_direction(dirn);
                 }
+                check_lights(&elevator, dirn, floor, elev_num_floors);
             }
             // Get info from comms_channel and process according to status if it is meant for us
             recv(comms_channel_rx) -> a => {
@@ -382,7 +312,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                             let new_order = message.order.unwrap();
 
                             let mut destination_list_w = destination_list.write().unwrap();
-                            destination_list_w.insert(new_order.floor_number);
+                            destination_list_w.insert(new_order);
                             let mut new_message = message;
                             new_message.target = new_message.sender;
                             new_message.sender = 0;
@@ -402,30 +332,35 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
             // This function polls continuously
             default(Duration::from_millis(200)) => {
 
-                // New scope to hog destination list as little as possible
-                {
-                // Opening destination list for reading
-                let mut destination_list_r = destination_list.read().unwrap();
-                
-                // Copying destination list and converting it to a vector so we can extract max and min
-                let mut destination_list_r_copy = destination_list_r.clone();
-                let mut destination_list_vec = Vec::from_iter(destination_list_r_copy);
-                let min = destination_list_vec.iter().min();
-                let max = destination_list_vec.iter().max();
+                if dirn == e::DIRN_STOP {
+                    let destination_list_r = destination_list.read().unwrap();
+                    let destination_list_r_copy = destination_list_r.clone();
+                    if !destination_list_r.is_empty() {
+                        let _top_floor = elev_num_floors-1;
+                        match last_floor {
+                            0 => {
+                                for destination in destination_list_r_copy {
+                                    if destination.direction != e::HALL_DOWN {
+                                        dirn = e::DIRN_UP;
+                                        elevator.motor_direction(dirn);
+                                        break;
+                                    }
+                                }
+                            }
+                            _top_floor => {
+                                for destination in destination_list_r_copy {
+                                    if destination.direction != e::HALL_UP {
+                                        dirn = e::DIRN_DOWN;
+                                        elevator.motor_direction(dirn);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
 
-                // Restarting elevator if it is stopped
-                // THIS SHOULD BE REWORKED
-                if dirn == DIRN_STOP && !destination_list_r.is_empty() {
-                    if *max.unwrap() < last_floor {
-                        dirn = DIRN_DOWN;
-                        elevator.motor_direction(dirn);
-                    }
-                    else if *min.unwrap() > last_floor {
-                        dirn = DIRN_UP;
-                        elevator.motor_direction(dirn);
-                    }
                 }
-                }
+                
 
                 // Create and send status to master
                 let current_status = Status {
