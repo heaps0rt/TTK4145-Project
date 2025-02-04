@@ -358,7 +358,6 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                     }
                     elevator.motor_direction(dirn);
                     println!("Fortsetter");
-                    
                 }
                 if dirn == e::DIRN_UP && floor == (elev_num_floors-1) {
                     dirn = e::DIRN_STOP;
