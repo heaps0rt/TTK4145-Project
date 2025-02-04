@@ -337,23 +337,35 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                     let destination_list_r_copy = destination_list_r.clone();
                     if !destination_list_r.is_empty() {
                         let _top_floor = elev_num_floors-1;
-                        match last_floor {
-                            0 => {
-                                for destination in destination_list_r_copy {
-                                    if destination.direction != e::HALL_DOWN {
-                                        dirn = e::DIRN_UP;
-                                        elevator.motor_direction(dirn);
-                                        break;
-                                    }
+                        if last_floor == 0 {
+                            for destination in destination_list_r_copy {
+                                if destination.direction != e::HALL_DOWN {
+                                    dirn = e::DIRN_UP;
+                                    elevator.motor_direction(dirn);
+                                    break;
                                 }
                             }
-                            _top_floor => {
-                                for destination in destination_list_r_copy {
-                                    if destination.direction != e::HALL_UP {
-                                        dirn = e::DIRN_DOWN;
-                                        elevator.motor_direction(dirn);
-                                        break;
-                                    }
+                        }
+                        else if last_floor == (elev_num_floors-1) {
+                            for destination in destination_list_r_copy {
+                                if destination.direction != e::HALL_UP {
+                                    dirn = e::DIRN_DOWN;
+                                    elevator.motor_direction(dirn);
+                                    break;
+                                }
+                            }
+                        }
+                        else {
+                            for destination in destination_list_r_copy {
+                                if destination.direction == e::HALL_UP {
+                                    dirn = e::DIRN_UP;
+                                    elevator.motor_direction(dirn);
+                                    break;
+                                }
+                                if destination.direction == e::HALL_DOWN {
+                                    dirn = e::DIRN_DOWN;
+                                    elevator.motor_direction(dirn);
+                                    break;
                                 }
                             }
                         }
