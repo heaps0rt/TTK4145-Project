@@ -228,7 +228,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
 
     // Setting up destination set with Rwlock
     // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
-    let mut destination_list = RwLock::from(HashSet::new());
+    let mut destination_list:RwLock<HashSet<Order>> = RwLock::from(HashSet::new());
 
     // The main running loop of the elevator
     loop {
@@ -332,34 +332,35 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
             // This function polls continuously
             default(Duration::from_millis(200)) => {
 
-                // ---------------------------------------------------------------------------------------------------------------------------
-                // REWORK NEEDED
-                // ---------------------------------------------------------------------------------------------------------------------------
+                if dirn == e::DIRN_STOP {
+                    let destination_list_r = destination_list.read().unwrap();
+                    let destination_list_r_copy = destination_list_r.clone();
+                    if !destination_list_r.is_empty() {
+                        let _top_floor = elev_num_floors-1;
+                        match last_floor {
+                            0 => {
+                                for destination in destination_list_r_copy {
+                                    if destination.direction != e::HALL_DOWN {
+                                        dirn = e::DIRN_UP;
+                                        elevator.motor_direction(dirn);
+                                        break;
+                                    }
+                                }
+                            }
+                            _top_floor => {
+                                for destination in destination_list_r_copy {
+                                    if destination.direction != e::HALL_UP {
+                                        dirn = e::DIRN_DOWN;
+                                        elevator.motor_direction(dirn);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
 
-                // New scope to hog destination list as little as possible
-                {
-                // Opening destination list for reading
-                let mut destination_list_r = destination_list.read().unwrap();
+                }
                 
-                // Copying destination list and converting it to a vector so we can extract max and min
-                let mut destination_list_r_copy = destination_list_r.clone();
-                let mut destination_list_vec = Vec::from_iter(destination_list_r_copy);
-                let min = destination_list_vec.iter().min();
-                let max = destination_list_vec.iter().max();
-
-                // Restarting elevator if it is stopped
-                // THIS SHOULD BE REWORKED
-                if dirn == DIRN_STOP && !destination_list_r.is_empty() {
-                    if *max.unwrap() < last_floor {
-                        dirn = DIRN_DOWN;
-                        elevator.motor_direction(dirn);
-                    }
-                    else if *min.unwrap() > last_floor {
-                        dirn = DIRN_UP;
-                        elevator.motor_direction(dirn);
-                    }
-                }
-                }
 
                 // Create and send status to master
                 let current_status = Status {
