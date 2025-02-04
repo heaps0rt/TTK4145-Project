@@ -91,6 +91,21 @@ fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () 
     }
 }
 
+fn orderDistance(order:Order, dirn: u8, floor: u8, num_floors: u8) -> () {
+    let orderFoor = order.floor_number;
+    let orderDirection = order.direction;
+    let distance:u8 = 0;
+    if dirn==DIRN_DOWN {let n:i32=-1;}
+    else if dirn==DIRN_UP {let n:i32=1;}
+    else {
+        if order.direction==DIRN_DOWN {let n:i32=-1;}
+        else if order.direction==DIRN_UP {let n:i32=1;}
+    }
+    loop { // Assumes current floor has been left
+        floor
+    }
+}
+
 // Sends orders to the elevator. Currently fucked
 fn order_up(comms_channel_tx: Sender<Communication>, order_list_w_copy: HashSet<Order>, status_list: &RwLockReadGuard<'_, Vec<Status>>) -> () {
     let mut sent_direction: u8 = u8::MAX;
