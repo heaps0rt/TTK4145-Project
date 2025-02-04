@@ -341,7 +341,6 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                 //println!("Floor: {:#?}", floor);
                 last_floor = floor;
                 //println!("Last floor updated to: {:#?}", last_floor);
-                check_lights(&elevator, dirn, floor, elev_num_floors);
 
                 let mut destination_list_w = destination_list.write().unwrap();
                 
@@ -369,6 +368,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                     dirn = e::DIRN_STOP;
                     elevator.motor_direction(dirn);
                 }
+                check_lights(&elevator, dirn, floor, elev_num_floors);
             }
             // Get info from comms_channel and process according to status if it is meant for us
             recv(comms_channel_rx) -> a => {
