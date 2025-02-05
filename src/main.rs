@@ -18,6 +18,7 @@ use driver_rust::elevio::elev::HALL_DOWN;
 use driver_rust::elevio::elev::HALL_UP;
 use driver_rust::elevio::elev as e;
 use driver_rust::elevio::poll;
+use driver_rust::elevio::poll::floor_sensor;
 use driver_rust::elevio::poll::CallButton;
 
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
@@ -48,7 +49,8 @@ pub struct Status {
     pub last_floor: u8,
     pub direction: u8,
     pub errors: bool, // Yes or no, any errors
-    pub obstructions: bool // Yes or no, any obstructions
+    pub obstructions: bool, // Yes or no, any obstructions
+    pub target_floor: Option<u8>
 }
 
 impl Status {
@@ -57,7 +59,8 @@ impl Status {
             last_floor: u8::MAX,
             direction: u8::MAX,
             errors: false,
-            obstructions: false
+            obstructions: false,
+            target_floor: None
         }
     }
 }
@@ -105,6 +108,40 @@ fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () 
         elevator.call_button_light(floor, e::HALL_DOWN, false);
         elevator.call_button_light(floor, e::HALL_UP, false);
     }
+}
+
+fn target_floor_function(dirn: u8, destination_list: RwLockReadGuard<'_, HashSet<Order>>, last_floor: u8) -> Option<u8> {
+    let mut destination_list_vec = Vec::new();
+    let mut destination_list_copy = destination_list.clone();
+    for order in destination_list_copy {
+        destination_list_vec.insert(0, order.floor_number);
+    }
+    match dirn {
+        e::DIRN_UP => {
+            let target_floor = destination_list_vec.iter().max();
+            return target_floor.copied();
+        }
+        e::DIRN_DOWN => {
+            let target_floor = destination_list_vec.iter().min();
+            return target_floor.copied();
+        }
+        e::DIRN_STOP => {
+            return Some(last_floor);
+        }
+        2_u8..=254_u8 => {
+            println!("Error getting target floor");
+            return Some(last_floor);
+        }
+    }
+}
+
+fn cost_of_order(order: Order, status: Status) -> u8 {
+    let target_floor = i32::from(status.target_floor.unwrap());
+    let last_floor = i32::from(status.last_floor);
+    let floor = i32::from(order.floor_number);
+    let cost = i32::abs(last_floor - target_floor) + i32::abs(target_floor - floor);
+
+    return cost as u8;
 }
 
 // Sends orders to the elevator. Currently fucked
@@ -276,7 +313,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                 }
             }
             // Get floor status and save last floor for later use
-            recv(floor_sensor_rx) -> a => { 
+            recv(floor_sensor_rx) -> a => {
                 let floor = a.unwrap();
                 //println!("Floor: {:#?}", floor);
                 last_floor = floor;
@@ -386,23 +423,26 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
 
                 }
                 
-
+                {
+                let destination_list_r = destination_list.read().unwrap();
                 // Create and send status to master
                 let current_status = Status {
                     last_floor: last_floor,
                     direction: dirn,
                     errors: false,
-                    obstructions: false
+                    obstructions: false,
+                    target_floor: target_floor_function(dirn, destination_list_r ,last_floor)
                 };
+                
                 let new_message = Communication {
                     sender: 0,
                     target: u8::MAX,
                     comm_type: STATUS_MESSAGE,
                     status: Some(current_status),
-                    order: Some(Order::new())
+                    order: None
                 };
                 comms_channel_tx.send(new_message).unwrap();
-
+                }
                 // New scope to hog destination list as little as possible
                 {
                 // Status update readout, mostly for debugging
