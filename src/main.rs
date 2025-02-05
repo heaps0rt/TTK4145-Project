@@ -76,6 +76,22 @@ pub struct Communication {
     pub order: Option<Order>
 }
 
+fn elevdirn_to_halldirn(dirn: u8) -> u8 {
+    let mut direction = 0;
+    match dirn {
+        e::DIRN_DOWN => {
+            direction = e::HALL_DOWN;
+        }
+        e::DIRN_UP => {
+            direction = e::HALL_UP;
+        }
+        0|2_u8..=254_u8 => {
+            println!("Can't convert direction");
+        }
+    }
+    return direction
+}
+
 // Self explanatory, checks what lights are on and turns off the correct ones
 fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () {
     elevator.call_button_light(floor, e::CAB, false);
@@ -182,8 +198,6 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
                     order_up(comms_channel_tx, order_list_r_copy, &status_list_r);
                 }
                 println!("{:#?}", status_list);
-
-                
             }
         }
     }
@@ -272,7 +286,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
 
                 let order_check = Order {
                     floor_number: floor,
-                    direction: dirn
+                    direction: elevdirn_to_halldirn(dirn)
                 };
                 if destination_list_w.contains(&order_check){
                     elevator.motor_direction(e::DIRN_STOP);
@@ -336,7 +350,6 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                     let destination_list_r = destination_list.read().unwrap();
                     let destination_list_r_copy = destination_list_r.clone();
                     if !destination_list_r.is_empty() {
-                        let _top_floor = elev_num_floors-1;
                         if last_floor == 0 {
                             for destination in destination_list_r_copy {
                                 if destination.direction != e::HALL_DOWN {
