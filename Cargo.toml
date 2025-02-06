@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 driver-rust = { git = "https://github.com/TTK4145/driver-rust"}
 crossbeam-channel = "0.5"
+cli-table = "0.4"
+clearscreen = "4.0.1"

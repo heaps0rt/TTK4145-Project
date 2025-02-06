@@ -22,6 +22,10 @@ use driver_rust::elevio::poll;
 use driver_rust::elevio::poll::floor_sensor;
 use driver_rust::elevio::poll::CallButton;
 
+// Libraries we have added go below
+use cli_table::{format::Justify, print_stdout, Cell, Style, Table};
+use clearscreen;
+
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
 pub struct Order {
     pub floor_number: u8,
@@ -162,7 +166,7 @@ fn order_up(comms_channel_tx: Sender<Communication>, order_list_w_copy: HashSet<
             status: None,
             order: Some(*element)
         };
-        println!("Sending order: {:#?}", new_message.order);
+        // println!("Sending order: {:#?}", new_message.order);
         comms_channel_tx.send(new_message).unwrap();
     }
 }
@@ -291,10 +295,12 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
     
     // Set up variable to remember what floor we were last at
     let mut last_floor: u8 = elev_num_floors+1;
+    let mut last_last_floor = 0;
 
     // Setting up destination set with Rwlock
     // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
     let mut destination_list:RwLock<HashSet<Order>> = RwLock::from(HashSet::new());
+    let mut last_destination_list: HashSet<Order> = HashSet::new();
 
     // The main running loop of the elevator
     loop {
@@ -414,7 +420,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                 }
             }
             // This function polls continuously
-            default(Duration::from_millis(40)) => {
+            default(Duration::from_millis(16)) => {
 
                 if dirn == e::DIRN_STOP {
                     let mut destination_list_w = destination_list.write().unwrap();
@@ -453,7 +459,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                 
                 {
                 let destination_list_r = destination_list.read().unwrap();
-                println!("{:#?}", destination_list_r);
+                // println!("{:#?}", destination_list_r);
                 // Create and send status to master
                 let current_status = Status {
                     last_floor: last_floor,
@@ -476,24 +482,26 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                 {
                 // Status update readout, mostly for debugging
                 let destination_list_r = destination_list.read().unwrap();
-                /* println!("\n\n\n\n\n");
-                println!("-------Status---------");
-                println!("Destinasjoner: {:#?}", destination_list_r);
-                match dirn{
-                    e::DIRN_DOWN => {
-                        println!("Retning: Ned");
-                    }
-                    e::DIRN_UP => {
-                        println!("Retning: Opp");
-                    }
-                    e::DIRN_STOP => {
-                        println!("Retning: Stoppet");
-                    }
-                    2_u8..=254_u8 => {
-                        println!("Noe har gått kraftig galt");
-                    }
+                let mut destination_list_r_copy = destination_list_r.clone();
+                
+                if destination_list_r_copy != last_destination_list || last_floor != last_last_floor {
+                    last_destination_list = destination_list_r_copy.clone();
+                    last_last_floor = last_floor.clone();
+                    clearscreen::clear().unwrap();
+                    let table = vec![
+                    vec!["Etasje".cell(), last_floor.cell().justify(Justify::Right)],
+                    vec!["Retning".cell(), dirn.cell().justify(Justify::Right)],
+                    vec!["Destinasjoner opp".cell(), format!("{:#?}", destination_list_r_copy.clone()).cell().justify(Justify::Right)],
+                    ]
+                    .table()
+                    .title(vec![
+                        "Variabel".cell().bold(true),
+                        "Verdi".cell().bold(true),
+                    ])
+                    .bold(true);
+
+                    assert!(print_stdout(table).is_ok());
                 }
-                println!("-------Slutt----------"); */
             }
             }
         }
