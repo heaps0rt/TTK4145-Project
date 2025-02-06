@@ -84,6 +84,23 @@ pub struct Communication {
     pub order: Option<Order>
 }
 
+fn direction_to_string(dirn: u8) -> String {
+    match dirn {
+        e::DIRN_UP => {
+            return String::from("Oppover");
+        }
+        e::DIRN_DOWN => {
+            return String::from("Nedover");
+        }
+        e::DIRN_STOP => {
+            return String::from("Stoppet");
+        }
+        2_u8..=254_u8 => {
+            return String::from("Ukjent");
+        }
+    }
+}
+
 fn elevdirn_to_halldirn(dirn: u8) -> u8 {
     let mut direction = 0;
     match dirn {
@@ -420,7 +437,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                 }
             }
             // This function polls continuously
-            default(Duration::from_millis(16)) => {
+            default(Duration::from_millis(50)) => {
 
                 if dirn == e::DIRN_STOP {
                     let mut destination_list_w = destination_list.write().unwrap();
@@ -483,6 +500,17 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                 // Status update readout, mostly for debugging
                 let destination_list_r = destination_list.read().unwrap();
                 let mut destination_list_r_copy = destination_list_r.clone();
+                let mut destinations_up: HashSet<u8> = HashSet::new();
+                let mut destinations_down: HashSet<u8> = HashSet::new();
+
+                for element in &destination_list_r_copy {
+                    if element.direction == e::HALL_UP {
+                        destinations_up.insert(element.floor_number);
+                    }
+                    else if element.direction == e::HALL_DOWN {
+                        destinations_down.insert(element.floor_number);
+                    }
+                }
                 
                 if destination_list_r_copy != last_destination_list || last_floor != last_last_floor {
                     last_destination_list = destination_list_r_copy.clone();
@@ -490,8 +518,9 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                     clearscreen::clear().unwrap();
                     let table = vec![
                     vec!["Etasje".cell(), last_floor.cell().justify(Justify::Right)],
-                    vec!["Retning".cell(), dirn.cell().justify(Justify::Right)],
-                    vec!["Destinasjoner opp".cell(), format!("{:#?}", destination_list_r_copy.clone()).cell().justify(Justify::Right)],
+                    vec!["Retning".cell(), direction_to_string(dirn).cell().justify(Justify::Right)],
+                    vec!["Destinasjoner opp".cell(), format!("{:#?}", destinations_up.clone()).cell().justify(Justify::Right)],
+                    vec!["Destinasjoner ned".cell(), format!("{:#?}", destinations_down.clone()).cell().justify(Justify::Right)],
                     ]
                     .table()
                     .title(vec![
