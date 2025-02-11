@@ -117,6 +117,22 @@ fn elevdirn_to_halldirn(dirn: u8) -> u8 {
     return direction
 }
 
+fn opposite_direction_hall(direction: u8) -> u8 {
+    let mut new_direction = 0;
+    match direction {
+        e::HALL_UP => {
+            new_direction = e::HALL_DOWN;
+        }
+        e::HALL_DOWN => {
+            new_direction = e::HALL_UP;
+        }
+        2_u8..=u8::MAX => {
+            println!("Can't invert direction");
+        }
+    }
+    return new_direction
+}
+
 // Self explanatory, checks what lights are on and turns off the correct ones
 fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () {
     elevator.call_button_light(floor, e::CAB, false);
@@ -132,7 +148,7 @@ fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () 
     }
 }
 
-fn target_floor_function(dirn: u8, destination_list: RwLockReadGuard<'_, HashSet<Order>>, last_floor: u8) -> Option<u8> {
+fn target_floor_function(dirn: u8, destination_list: HashSet<Order>, last_floor: u8) -> Option<u8> {
     let mut destination_list_vec = Vec::new();
     let mut destination_list_copy = destination_list.clone();
     for order in destination_list_copy {
@@ -368,11 +384,21 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
 
                     elevator.door_light(true);
                     sleep(Duration::from_millis(1000));
-                    elevator.door_light(false);
 
+                    let destination_list_w_copy = destination_list_w.clone();
                     if destination_list_w.is_empty(){
                         dirn = e::DIRN_STOP;
+                        
                     }
+                    else if target_floor_function(dirn, destination_list_w_copy, last_floor).unwrap() == last_floor {
+                        let order_check_opposite = Order {
+                            floor_number: floor,
+                            direction: opposite_direction_hall(elevdirn_to_halldirn(dirn))
+                        };
+                        destination_list_w.remove(&order_check_opposite);
+                        dirn = e::DIRN_STOP;
+                    }
+                    elevator.door_light(false);
                     elevator.motor_direction(dirn);
                     println!("Fortsetter");
                     
@@ -437,7 +463,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                 }
             }
             // This function polls continuously
-            default(Duration::from_millis(50)) => {
+            default(Duration::from_millis(100)) => {
 
                 if dirn == e::DIRN_STOP {
                     let mut destination_list_w = destination_list.write().unwrap();
@@ -447,27 +473,18 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                             destination_list_w.remove(destination);
                         }
                     }
+                    sleep(Duration::from_millis(200));
                     if !destination_list_w.is_empty() {
-                        if last_floor == 0 {
-                                    dirn = e::DIRN_UP;
-                                    elevator.motor_direction(dirn);
-                        }
-                        else if last_floor == (elev_num_floors-1) {
-                                    dirn = e::DIRN_DOWN;
-                                    elevator.motor_direction(dirn);
-                        }
-                        else {
-                            for destination in &destination_list_w_copy {
-                                if destination.floor_number > last_floor {
-                                    dirn = e::DIRN_UP;
-                                    elevator.motor_direction(dirn);
-                                    break;
-                                }
-                                if destination.floor_number < last_floor {
-                                    dirn = e::DIRN_DOWN;
-                                    elevator.motor_direction(dirn);
-                                    break;
-                                }
+                        for destination in &destination_list_w_copy {
+                            if destination.floor_number > last_floor {
+                                dirn = e::DIRN_UP;
+                                elevator.motor_direction(dirn);
+                                break;
+                            }
+                            if destination.floor_number < last_floor {
+                                dirn = e::DIRN_DOWN;
+                                elevator.motor_direction(dirn);
+                                break;
                             }
                         }
                     }
@@ -478,12 +495,13 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                 let destination_list_r = destination_list.read().unwrap();
                 // println!("{:#?}", destination_list_r);
                 // Create and send status to master
+                let destination_list_r_copy = destination_list_r.clone();
                 let current_status = Status {
                     last_floor: last_floor,
                     direction: dirn,
                     errors: false,
                     obstructions: false,
-                    target_floor: target_floor_function(dirn, destination_list_r ,last_floor)
+                    target_floor: target_floor_function(dirn, destination_list_r_copy, last_floor)
                 };
                 
                 let new_message = Communication {
