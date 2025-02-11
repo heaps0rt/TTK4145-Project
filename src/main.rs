@@ -204,6 +204,15 @@ fn order_up(comms_channel_tx: Sender<Communication>, order_list_w_copy: HashSet<
     }
 }
 
+fn add_hall_call(order_list_w:&mut RwLockWriteGuard<'_, HashSet<Order>>, call_button:&CallButton, elevator:Elevator)-> () {
+    let new_order = Order {
+        floor_number: call_button.floor,
+        direction: call_button.call
+    };
+    order_list_w.insert(new_order);
+    elevator.call_button_light(call_button.floor, call_button.call, true);
+}
+
 // Master function. Runs forever (or till it panics)
 fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, comms_channel_tx: Sender<Communication>, comms_channel_rx: Receiver<Communication>) -> () {
 
@@ -229,15 +238,9 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
                 let call_button = a.unwrap();
                 // If call is a hall call, add it
                 if call_button.call == e::HALL_DOWN || call_button.call == e::HALL_UP {
-                    let new_order = Order {
-                        floor_number: call_button.floor,
-                        direction: call_button.call
-                    };
-
                     let mut order_list_w = order_list.write().unwrap();
-                    order_list_w.insert(new_order);
-                    elevator.call_button_light(call_button.floor, call_button.call, true);
-
+                    let elevator = elevator.clone();
+                    add_hall_call(&mut order_list_w, &call_button, elevator); // Adds new order to order_list
                 }
             }
 
