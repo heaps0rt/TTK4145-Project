@@ -390,7 +390,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                         dirn = e::DIRN_STOP;
                         
                     }
-                    else if target_floor_function(dirn, destination_list_w_copy, last_floor).unwrap() == last_floor {
+                    if target_floor_function(dirn, destination_list_w_copy, last_floor).unwrap() == last_floor {
                         let order_check_opposite = Order {
                             floor_number: floor,
                             direction: opposite_direction_hall(elevdirn_to_halldirn(dirn))
