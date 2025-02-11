@@ -84,6 +84,17 @@ pub struct Communication {
     pub order: Option<Order>
 }
 
+// Const variables for use in internal_comms
+pub const ADD: u8 = 0;
+pub const REMOVE: u8 = 1;
+pub const READ: u8 = 2;
+
+#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
+pub struct InternalCommunication {
+    pub intention: u8,
+    pub order: Order
+}
+
 fn direction_to_string(dirn: u8) -> String {
     match dirn {
         e::DIRN_UP => {
@@ -184,8 +195,10 @@ fn cost_of_order(order: Order, status: Status) -> u8 {
     // also checks if the order direction is the same as the elevator direction.
     if (order.direction==DIRN_UP && (target_floor>order_floor && order_floor>last_floor))
     || (order.direction==DIRN_DOWN && (target_floor<order_floor && order_floor<last_floor)) {
+        // If the order floor is on our path, the cost is the distance between last_floor and order_floor
         cost = i32::abs(last_floor - order_floor);
     } else {
+        // If the order floor is not on our path, the cost is the distance between last_floor and target_floor and the distance between target_floor and order_floor
         cost = i32::abs(last_floor - target_floor) + i32::abs(target_floor - order_floor);
     }
     return cost as u8;
@@ -213,16 +226,20 @@ fn order_up(comms_channel_tx: Sender<Communication>, order_list_w_copy: HashSet<
     }
 }
 
-fn add_hall_call(mut order_list_w: RwLockWriteGuard<'_, HashSet<Order>>, call_button:CallButton, elevator:Elevator)-> () {
+fn add_hall_call(master_order_channel_tx:Sender<InternalCommunication>, call_button:CallButton, elevator:Elevator)-> () {
     let new_order = Order {
         floor_number: call_button.floor,
         direction: call_button.call
     };
-    order_list_w.insert(new_order);
+    let new_comm = InternalCommunication {
+        intention: ADD,
+        order: new_order
+    };
+    master_order_channel_tx.send(new_comm);
     elevator.call_button_light(call_button.floor, call_button.call, true);
 }
 
-fn receive_message(message: Communication, mut status_list_w: RwLockWriteGuard<'_, Vec<Status>>, mut order_list_w: RwLockWriteGuard<'_, HashSet<Order>>) -> () {
+fn receive_message(master_order_channel_tx:Sender<InternalCommunication>,message: Communication, mut status_list_w: RwLockWriteGuard<'_, Vec<Status>>) -> () {
     if message.target == u8::MAX {
         match message.comm_type {
             STATUS_MESSAGE => {
@@ -233,15 +250,35 @@ fn receive_message(message: Communication, mut status_list_w: RwLockWriteGuard<'
                 // Message is not for me
             }
             ORDER_ACK => {
-                if order_list_w.contains(&message.order.unwrap()) {
-                    order_list_w.remove(&message.order.unwrap());
-                }
-                else {
-                    println!("Feil i ack av order")
-                }
+                let new_comm = InternalCommunication {
+                    intention: REMOVE,
+                    order: message.order.unwrap()
+                };
+                master_order_channel_tx.send(new_comm);
             }
             3_u8..=u8::MAX => {
                 println!("Feil i meldingssending")
+            }
+        }
+    }
+}
+
+fn master_order_handler(master_order_channel_rx: Receiver<InternalCommunication>, mut order_list: HashSet<Order>) -> () {
+    loop {
+        cbc::select! {
+            recv(master_order_channel_rx) -> a => {
+                let communication = a.unwrap();
+                match communication.intention {
+                    ADD => {order_list.insert(communication.order);}
+                    REMOVE => {if order_list.contains(&communication.order) {
+                        order_list.remove(&communication.order);
+                    }
+                    else {
+                        println!("Rip.")
+                    }
+                    }
+                    READ => {}
+                }
             }
         }
     }
@@ -258,10 +295,13 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
 
     // Setting up prder set and status list with Rwlock
     // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
-    let mut order_list = RwLock::from(HashSet::new());
+    let mut order_list = HashSet::new();
     let mut status_list = RwLock::from(Vec::from([Status::new()]));
     let mut elevator_direction = e::DIRN_STOP;
 
+    let (master_order_channel_tx, master_order_channel_rx) = cbc::unbounded();
+    {spawn(move || master_order_handler(master_order_channel_rx, order_list));}
+    
     // Main master loop
     loop {
         // Crossbeam channel runs the main functions of the master
@@ -272,9 +312,8 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
                 let call_button = a.unwrap();
                 // If call is a hall call, add it
                 if call_button.call == e::HALL_DOWN || call_button.call == e::HALL_UP {
-                    let order_list_w = order_list.write().unwrap();
                     let elevator = elevator.clone();
-                    add_hall_call(order_list_w, call_button, elevator); // Adds new hall call to order_list
+                    add_hall_call(master_order_channel_tx, call_button, elevator); // Adds new hall call to order_list
                 }
             }
 
@@ -284,7 +323,7 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
                 // println!("Received message: {:#?}", message.comm_type);
                 let status_list_w = status_list.write().unwrap();
                 let order_list_w = order_list.write().unwrap();
-                receive_message(message,status_list_w,order_list_w);
+                receive_message(master_order_channel_tx,message,status_list_w);
             }
             // This function polls continuously if no other functions have been called
             default(Duration::from_millis(50)) => {
