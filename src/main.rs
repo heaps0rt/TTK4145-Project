@@ -204,13 +204,38 @@ fn order_up(comms_channel_tx: Sender<Communication>, order_list_w_copy: HashSet<
     }
 }
 
-fn add_hall_call(order_list_w:&mut RwLockWriteGuard<'_, HashSet<Order>>, call_button:&CallButton, elevator:Elevator)-> () {
+fn add_hall_call(mut order_list_w: RwLockWriteGuard<'_, HashSet<Order>>, call_button:CallButton, elevator:Elevator)-> () {
     let new_order = Order {
         floor_number: call_button.floor,
         direction: call_button.call
     };
     order_list_w.insert(new_order);
     elevator.call_button_light(call_button.floor, call_button.call, true);
+}
+
+fn receive_message(message: Communication, mut status_list_w: RwLockWriteGuard<'_, Vec<Status>>, mut order_list_w: RwLockWriteGuard<'_, HashSet<Order>>) -> () {
+    if message.target == u8::MAX {
+        match message.comm_type {
+            STATUS_MESSAGE => {
+                // println!("Received status: {:#?}", message.status);
+                status_list_w[message.sender as usize] = message.status.unwrap();
+            }
+            ORDER_TRANSFER => {
+                // Message is not for me
+            }
+            ORDER_ACK => {
+                if order_list_w.contains(&message.order.unwrap()) {
+                    order_list_w.remove(&message.order.unwrap());
+                }
+                else {
+                    println!("Feil i ack av order")
+                }
+            }
+            3_u8..=u8::MAX => {
+                println!("Feil i meldingssending")
+            }
+        }
+    }
 }
 
 // Master function. Runs forever (or till it panics)
@@ -238,9 +263,9 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
                 let call_button = a.unwrap();
                 // If call is a hall call, add it
                 if call_button.call == e::HALL_DOWN || call_button.call == e::HALL_UP {
-                    let mut order_list_w = order_list.write().unwrap();
+                    let order_list_w = order_list.write().unwrap();
                     let elevator = elevator.clone();
-                    add_hall_call(&mut order_list_w, &call_button, elevator); // Adds new order to order_list
+                    add_hall_call(order_list_w, call_button, elevator); // Adds new hall call to order_list
                 }
             }
 
@@ -248,30 +273,9 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
             recv(comms_channel_rx) -> a => {
                 let message = a.unwrap();
                 // println!("Received message: {:#?}", message.comm_type);
-                if message.target == u8::MAX {
-                    match message.comm_type {
-                        STATUS_MESSAGE => {
-                            // println!("Received status: {:#?}", message.status);
-                            let mut status_list_w = status_list.write().unwrap();
-                            status_list_w[message.sender as usize] = message.status.unwrap();
-                        }
-                        ORDER_TRANSFER => {
-                            // Message is not for me
-                        }
-                        ORDER_ACK => {
-                            let mut order_list_w = order_list.write().unwrap();
-                            if order_list_w.contains(&message.order.unwrap()) {
-                                order_list_w.remove(&message.order.unwrap());
-                            }
-                            else {
-                                println!("Feil i ack av order")
-                            }
-                        }
-                        3_u8..=u8::MAX => {
-                            println!("Feil i meldingssending")
-                        }
-                    }
-                }
+                let status_list_w = status_list.write().unwrap();
+                let order_list_w = order_list.write().unwrap();
+                receive_message(message,status_list_w,order_list_w);
             }
             // This function polls continuously if no other functions have been called
             default(Duration::from_millis(50)) => {
