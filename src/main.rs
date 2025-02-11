@@ -271,7 +271,7 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
                 }
             }
             // This function polls continuously if no other functions have been called
-            default(Duration::from_millis(50)) => {
+            default(Duration::from_millis(5)) => {
                 // Opening status list for reading
                 let mut status_list_r = status_list.read().unwrap();
 
@@ -463,7 +463,7 @@ fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, 
                 }
             }
             // This function polls continuously
-            default(Duration::from_millis(100)) => {
+            default(Duration::from_millis(10)) => {
 
                 if dirn == e::DIRN_STOP {
                     let mut destination_list_w = destination_list.write().unwrap();
