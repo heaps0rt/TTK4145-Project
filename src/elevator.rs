@@ -88,7 +88,9 @@ pub struct InternalCommunication {
 // Const variables for use in internal comms
 pub const DELETE: u8 = 0;
 pub const INSERT: u8 = 1;
-pub const REQUEST: u8 = 2;
+pub const REQUEST_DESTINATION: u8 = 6;
+pub const REQUEST_DIRECTION: u8 = 7;
+pub const UPDATE_DIRECTION: u8 = 8;
 
 fn direction_to_string(dirn: u8) -> String {
     match dirn {
@@ -288,13 +290,18 @@ fn continue_or_not(mut dirn: u8, floor: u8, target_floor: u8, elevator: Elevator
 fn floor_recieved(floor: u8, mut last_floor: u8, elevator: Elevator, elev_num_floors: u8, mut target_floor: u8, internal_order_channel_tx: Sender<InternalCommunication>, elevator_controller_tx: Sender<u8>, elevator_readout_rx: Receiver<u8>, destination_list_rx: Receiver<HashSet<Order>>) -> () {
                 println!("Floor: {:#?}", floor);
                 let new_comm = InternalCommunication {
-                    intention: REQUEST,
+                    intention: REQUEST_DESTINATION,
                     order: None
                 };
                 internal_order_channel_tx.send(new_comm).unwrap();
                 let a = destination_list_rx.recv();
                 let destination_list = a.unwrap();
-                elevator_controller_tx.send(REQUEST).unwrap();
+
+                let new_comm2 = InternalCommunication {
+                    intention: REQUEST_DIRECTION,
+                    order: None
+                };
+                internal_order_channel_tx.send(new_comm2).unwrap();
                 let dirn: u8 = elevator_readout_rx.recv().unwrap();
                 println!("Mottat retning: {:#?}", dirn);
                 //println!("Last floor updated to: {:#?}", last_floor);
@@ -319,8 +326,9 @@ fn floor_recieved(floor: u8, mut last_floor: u8, elevator: Elevator, elev_num_fl
                 check_lights(&elevator, dirn, floor, elev_num_floors);
 }
 
-fn elevator_memory(internal_order_channel_rx: Receiver<InternalCommunication>, destination_list_tx: Sender<HashSet<Order>>) -> () {
+fn elevator_memory(internal_order_channel_rx: Receiver<InternalCommunication>, destination_list_tx: Sender<HashSet<Order>>, elevator_readout_tx: Sender<u8>) -> () {
     let mut destination_list: HashSet<Order> = HashSet::new();
+    let mut direction: u8 = e::DIRN_DOWN;
     loop {
         cbc::select! {
             recv(internal_order_channel_rx) -> a => {
@@ -332,12 +340,20 @@ fn elevator_memory(internal_order_channel_rx: Receiver<InternalCommunication>, d
                     DELETE => { // remove
                         destination_list.remove(&communication.order.unwrap());
                     }
-                    REQUEST => {
+                    REQUEST_DESTINATION => {
                         let destination_list_copy = destination_list.clone();
                         destination_list_tx.send(destination_list_copy).unwrap();
                     }
-                    3_u8..=u8::MAX => {
-
+                    REQUEST_DIRECTION => {
+                        elevator_readout_tx.send(direction).unwrap();
+                        // println!("Retning sendt: {:#?}", direction);
+                    }
+                    UPDATE_DIRECTION => {
+                        let order = communication.order.unwrap();
+                        direction = order.direction;
+                    }
+                    2_u8..=5_u8|9_u8..=u8::MAX => {
+                        println!("Wrong message to memory")
                     }
                 }
             }
@@ -348,7 +364,7 @@ fn elevator_memory(internal_order_channel_rx: Receiver<InternalCommunication>, d
     }
 }
 
-fn elevator_controller(elevator_controller_rx: Receiver<u8>,elevator_readout_tx: Sender<u8>, elevator: Elevator) -> () {
+fn elevator_controller(elevator_controller_rx: Receiver<u8>, elevator: Elevator, internal_order_channel_tx: Sender<InternalCommunication>) -> () {
     let mut direction: u8 = e::DIRN_DOWN;
     loop {
         cbc::select! {
@@ -360,17 +376,22 @@ fn elevator_controller(elevator_controller_rx: Receiver<u8>,elevator_readout_tx:
                         direction = direction_ordered;
                         elevator.motor_direction(direction);
                         println!("Retning satt");
-                    }
-                    REQUEST => {
-                        elevator_readout_tx.send(direction).unwrap();
-                        // println!("Retning sendt: {:#?}", direction);
+                        let new_order = Order {
+                            floor_number: 0,
+                            direction: direction
+                        };
+                        let new_comm = InternalCommunication {
+                            intention: UPDATE_DIRECTION,
+                            order: Some(new_order)
+                        };
+                        internal_order_channel_tx.send(new_comm).unwrap();
                     }
                     DIRN_STOP_TEMP => {
                         elevator.motor_direction(e::DIRN_STOP);
                         sleep(Duration::from_millis(3000));
                         elevator.motor_direction(direction);
                     }
-                    4_u8..=254_u8 => {
+                    2_u8|4_u8..=254_u8 => {
                         println!("Feil ordre mottat i kontroller");
                     }
                 }
@@ -457,18 +478,21 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
     let (internal_order_channel_tx, internal_order_channel_rx) = cbc::unbounded();
     let (destination_list_tx, destination_list_rx) = cbc::unbounded();
 
-    {
-    spawn(move || elevator_memory(internal_order_channel_rx, destination_list_tx));
-    }
-
     let (elevator_controller_tx, elevator_controller_rx) = cbc::unbounded();
     let (elevator_readout_tx, elevator_readout_rx) = cbc::unbounded::<u8>();
 
     {
+    let elevator_readout_tx = elevator_readout_tx.clone();
+    spawn(move || elevator_memory(internal_order_channel_rx, destination_list_tx, elevator_readout_tx));
+    }
+
+    
+
+    {
     let elevator = elevator.clone();
     let elevator_controller_rx = elevator_controller_rx.clone();
-    let elevator_readout_tx = elevator_readout_tx.clone();
-    spawn(move || elevator_controller(elevator_controller_rx, elevator_readout_tx, elevator));
+    let internal_order_channel_tx = internal_order_channel_tx.clone();
+    spawn(move || elevator_controller(elevator_controller_rx, elevator, internal_order_channel_tx));
     }
 
     // The main running loop of the elevator
@@ -482,7 +506,7 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
                 if call_button.call == e::CAB {
                     let elevator = elevator.clone();
                     let internal_order_channel_tx = internal_order_channel_tx.clone();
-                    handle_cab_order(call_button, last_floor, elevator, internal_order_channel_tx);
+                    spawn(move||handle_cab_order(call_button, last_floor, elevator, internal_order_channel_tx));
                 }
             }
             // Get floor status and save last floor for later use
@@ -505,16 +529,21 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
                 if message.target == 0 {
                     let internal_order_channel_tx = internal_order_channel_tx.clone();
                     let comms_channel_tx = comms_channel_tx.clone();
-                    message_from_master(message, internal_order_channel_tx, comms_channel_tx);
+                    spawn (move || message_from_master(message, internal_order_channel_tx, comms_channel_tx));
                 }
             }
             // This function polls continuously
             default(Duration::from_millis(100)) => {
-                elevator_controller_tx.send(REQUEST).unwrap();
+
+                let new_comm2 = InternalCommunication {
+                    intention: REQUEST_DIRECTION,
+                    order: None
+                };
+                internal_order_channel_tx.send(new_comm2).unwrap();
                 let direction = elevator_readout_rx.recv().unwrap();
                 if direction == e::DIRN_STOP {
                     let new_comm = InternalCommunication {
-                        intention: REQUEST,
+                        intention: REQUEST_DESTINATION,
                         order: None
                     };
                     internal_order_channel_tx.send(new_comm).unwrap();
@@ -540,7 +569,7 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
 
                 
                 let new_comm = InternalCommunication {
-                    intention: REQUEST,
+                    intention: REQUEST_DESTINATION,
                     order: None
                 };
                 internal_order_channel_tx.send(new_comm).unwrap();
