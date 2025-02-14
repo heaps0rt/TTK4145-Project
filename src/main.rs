@@ -71,9 +71,23 @@ impl Status {
     }
 }
 
+// Const variables for use in comms
+pub const STATUS_MESSAGE: u8 = 0;
+pub const ORDER_TRANSFER: u8 = 1;
+pub const ORDER_ACK: u8 = 2;
+
+#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
+pub struct Communication {
+    pub sender: u8,
+    pub target: u8,
+    pub comm_type: u8,
+    pub status: Option<Status>,
+    pub order: Option<Order>
+}
+
 mod elevator;
 
-/* fn cost_of_order(order: Order, status: Status) -> u8 {
+fn cost_of_order(order: Order, status: Status) -> u8 {
     let target_floor = i32::from(status.target_floor.unwrap());
     let last_floor = i32::from(status.last_floor);
     let floor = i32::from(order.floor_number);
@@ -190,7 +204,7 @@ fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, co
             }
         }
     }
-} */
+} 
 
 fn main() -> std::io::Result<()> {
     // Setting up durations for later use

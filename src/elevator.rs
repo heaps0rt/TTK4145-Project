@@ -27,6 +27,8 @@ use driver_rust::elevio::poll::CallButton;
 use cli_table::{format::Justify, print_stdout, Cell, Style, Table};
 use clearscreen;
 
+pub const DIRN_STOP_TEMP: u8 = 3;
+
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd)]
 pub struct Order {
     pub floor_number: u8,
@@ -75,16 +77,6 @@ pub struct Communication {
     pub comm_type: u8,
     pub status: Option<Status>,
     pub order: Option<Order>
-}
-
-#[derive(Clone, Debug)]
-pub struct ElevatorFunctions {
-    pub last_floor: u8,
-    pub direction: u8,
-    pub errors: bool, // Yes or no, any errors
-    pub obstructions: bool, // Yes or no, any obstructions
-    pub destination_list: HashSet<Order>,
-    pub target_floor: u8
 }
 
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
@@ -236,8 +228,8 @@ fn check_for_stop(floor: u8, mut dirn: u8, destination_list: HashSet<Order>, ele
     let mut destination_list_copy = destination_list.clone();
     for destination in destination_list_copy {
         if destination.floor_number == floor {
-            if destination.direction == dirn {
-                elevator_controller_tx.send(e::DIRN_STOP).unwrap();
+            if halldirn_to_elevdirn(destination.direction) == dirn {
+                elevator_controller_tx.send(DIRN_STOP_TEMP).unwrap();
                 println!("Stopper");
 
                 let new_comm = InternalCommunication {
@@ -247,11 +239,11 @@ fn check_for_stop(floor: u8, mut dirn: u8, destination_list: HashSet<Order>, ele
                 internal_order_channel_tx.send(new_comm).unwrap();
 
                 elevator.door_light(true);
-                sleep(Duration::from_millis(1000));
+                sleep(Duration::from_millis(3000));
                 elevator.door_light(false);
             }
             if destination.direction != dirn && floor == target_floor {
-                elevator_controller_tx.send(e::DIRN_STOP).unwrap();
+                elevator_controller_tx.send(DIRN_STOP_TEMP).unwrap();
                 println!("Stopper");
 
                 let new_comm = InternalCommunication {
@@ -261,7 +253,7 @@ fn check_for_stop(floor: u8, mut dirn: u8, destination_list: HashSet<Order>, ele
                 internal_order_channel_tx.send(new_comm).unwrap();
 
                 elevator.door_light(true);
-                sleep(Duration::from_millis(1000));
+                sleep(Duration::from_millis(3000));
                 elevator.door_light(false);
             }
         }
@@ -362,19 +354,58 @@ fn elevator_controller(elevator_controller_rx: Receiver<u8>,elevator_readout_tx:
         cbc::select! {
             recv(elevator_controller_rx) -> a => {
                 let direction_ordered = a.unwrap();
-                if direction_ordered == e::DIRN_DOWN|e::DIRN_UP|DIRN_STOP {
-                    direction = direction_ordered;
-                    elevator.motor_direction(direction);
-                    println!("Retning satt");
+                // println!("Mottat melding: {:#?}", direction_ordered);
+                match direction_ordered {
+                    e::DIRN_DOWN|e::DIRN_STOP|e::DIRN_UP => {
+                        direction = direction_ordered;
+                        elevator.motor_direction(direction);
+                        println!("Retning satt");
+                    }
+                    REQUEST => {
+                        elevator_readout_tx.send(direction).unwrap();
+                        // println!("Retning sendt: {:#?}", direction);
+                    }
+                    DIRN_STOP_TEMP => {
+                        elevator.motor_direction(e::DIRN_STOP);
+                        sleep(Duration::from_millis(3000));
+                        elevator.motor_direction(direction);
+                    }
+                    4_u8..=254_u8 => {
+                        println!("Feil ordre mottat i kontroller");
+                    }
                 }
-                if direction_ordered == REQUEST {
-                    elevator_readout_tx.send(direction);
-                    // println!("Retning sendt: {:#?}", direction);
-                }
+
             }
-            default(Duration::from_millis(100)) => {
-                //Chiller
-            }
+        }
+    }
+}
+
+fn message_from_master(message: Communication, internal_order_channel_tx: Sender<InternalCommunication>, comms_channel_tx: Sender<Communication>) -> () {
+    match message.comm_type {
+        STATUS_MESSAGE => {
+            // Message is not for me
+        }
+        ORDER_TRANSFER => {
+            let new_order = message.order.unwrap();
+            let new_comm = InternalCommunication {
+                intention: INSERT,
+                order: Some(new_order)
+            };
+            let internal_order_channel_tx = internal_order_channel_tx.clone();
+            internal_order_channel_tx.send(new_comm).unwrap();
+
+            let mut new_message = message;
+            new_message.target = new_message.sender;
+            new_message.sender = 0;
+            new_message.comm_type = ORDER_ACK;
+            comms_channel_tx.send(new_message).unwrap();
+            sleep(Duration::from_millis(10));
+        }
+        ORDER_ACK => {
+            // Message is not for me
+        }
+        3_u8..=u8::MAX => {
+            println!("Feil i meldingssending")
         }
     }
 }
@@ -463,42 +494,18 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
                 let elevator = elevator.clone();
                 let internal_order_channel_tx = internal_order_channel_tx.clone();
                 let elevator_controller_tx = elevator_controller_tx.clone();
-                let elevator_controller_rx = elevator_controller_rx.clone();
+                let elevator_readout_rx = elevator_readout_rx.clone();
                 let destination_list_rx = destination_list_rx.clone();
-                spawn(move || floor_recieved(floor, last_floor, elevator, elev_num_floors, target_floor, internal_order_channel_tx, elevator_controller_tx, elevator_controller_rx, destination_list_rx));
+                spawn(move || floor_recieved(floor, last_floor, elevator, elev_num_floors, target_floor, internal_order_channel_tx, elevator_controller_tx, elevator_readout_rx, destination_list_rx));
                 }
             }
             // Get info from comms_channel and process according to status if it is meant for us
             recv(comms_channel_rx) -> a => {
                 let message = a.unwrap();
                 if message.target == 0 {
-                    match message.comm_type {
-                        STATUS_MESSAGE => {
-                            // Message is not for me
-                        }
-                        ORDER_TRANSFER => {
-                            let new_order = message.order.unwrap();
-                            let new_comm = InternalCommunication {
-                                intention: INSERT,
-                                order: Some(new_order)
-                            };
-                            let internal_order_channel_tx = internal_order_channel_tx.clone();
-                            internal_order_channel_tx.send(new_comm).unwrap();
-
-                            let mut new_message = message;
-                            new_message.target = new_message.sender;
-                            new_message.sender = 0;
-                            new_message.comm_type = ORDER_ACK;
-                            comms_channel_tx.send(new_message).unwrap();
-                            sleep(Duration::from_millis(10));
-                        }
-                        ORDER_ACK => {
-                            // Message is not for me
-                        }
-                        3_u8..=u8::MAX => {
-                            println!("Feil i meldingssending")
-                        }
-                    }
+                    let internal_order_channel_tx = internal_order_channel_tx.clone();
+                    let comms_channel_tx = comms_channel_tx.clone();
+                    message_from_master(message, internal_order_channel_tx, comms_channel_tx);
                 }
             }
             // This function polls continuously
