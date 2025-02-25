@@ -23,6 +23,7 @@ use driver_rust::elevio::poll;
 use driver_rust::elevio::poll::floor_sensor;
 use driver_rust::elevio::poll::CallButton;
 
+// main.rs structures below
 use crate::Communication;
 use crate::Status;
 use crate::Order;
@@ -230,7 +231,7 @@ fn check_for_stop(floor: u8, mut dirn: u8, destination_list: HashSet<Order>, ele
     }
 }
 
-// Check if we're at the bottom of the lift
+// Check if we're at the bottom of the elevator
 fn check_for_bottom(mut dirn: u8, floor: u8, elevator: Elevator, elev_num_floors: u8, elevator_controller_tx: Sender<u8>) -> () {
     println!("Retning: {:#?}", dirn);
     println!("Etasje: {:#?}", floor);
