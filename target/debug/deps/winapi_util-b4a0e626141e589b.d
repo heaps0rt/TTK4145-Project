@@ -1,0 +1,11 @@
+C:\Users\morte\Downloads\New folder\target\debug\deps\libwinapi_util-b4a0e626141e589b.rmeta: C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\lib.rs C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\console.rs C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\file.rs C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\sysinfo.rs C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\win.rs
+
+C:\Users\morte\Downloads\New folder\target\debug\deps\libwinapi_util-b4a0e626141e589b.rlib: C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\lib.rs C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\console.rs C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\file.rs C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\sysinfo.rs C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\win.rs
+
+C:\Users\morte\Downloads\New folder\target\debug\deps\winapi_util-b4a0e626141e589b.d: C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\lib.rs C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\console.rs C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\file.rs C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\sysinfo.rs C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\win.rs
+
+C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\lib.rs:
+C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\console.rs:
+C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\file.rs:
+C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\sysinfo.rs:
+C:\Users\morte\.cargo\registry\src\index.crates.io-6f17d22bba15001f\winapi-util-0.1.9\src\win.rs:

@@ -87,12 +87,23 @@ pub struct Communication {
 
 mod elevator;
 
+// Finds the relative distance to an order based on the current target floor.
 fn cost_of_order(order: Order, status: Status) -> u8 {
-    let target_floor = i32::from(status.target_floor.unwrap());
+    let target_floor = i32::from(status.target_floor.unwrap()); //
     let last_floor = i32::from(status.last_floor);
-    let floor = i32::from(order.floor_number);
-    let cost = i32::abs(last_floor - target_floor) + i32::abs(target_floor - floor);
-
+    let order_floor = i32::from(order.floor_number);
+    let cost:i32;
+    
+    // Finds whether the order floor is between last_floor and target_floor, 
+    // also checks if the order direction is the same as the elevator direction.
+    if (order.direction==DIRN_UP && (target_floor>order_floor && order_floor>last_floor))
+    || (order.direction==DIRN_DOWN && (target_floor<order_floor && order_floor<last_floor)) {
+        // If the order floor is on our path, the cost is the distance between last_floor and order_floor
+        cost = i32::abs(last_floor - order_floor);
+    } else {
+        // If the order floor is not on our path, the cost is the distance from last_floor to target_floor to order_floor
+        cost = i32::abs(last_floor - target_floor) + i32::abs(target_floor - order_floor);
+    }
     return cost as u8;
 }
 
@@ -113,7 +124,7 @@ fn order_up(comms_channel_tx: Sender<Communication>, order_list_w_copy: HashSet<
             status: None,
             order: Some(*element)
         };
-        // println!("Sending order: {:#?}", new_message.order);
+        println!("Sending order: {:#?}", new_message.order);
         comms_channel_tx.send(new_message).unwrap();
     }
 }
@@ -219,7 +230,7 @@ fn main() -> std::io::Result<()> {
     println!("Elevator started:\n{:#?}", elevator);
 
     // Set up communication channel, this is just a substitute for network communication we will implement later
-    let (comms_channel_tx, comms_channel_rx) = cbc::unbounded(); 
+    let (comms_channel_tx, comms_channel_rx) = cbc::unbounded::<Communication>(); 
 
     // Set poll period for buttons and sensors
     let poll_period = Duration::from_millis(25);
@@ -232,9 +243,9 @@ fn main() -> std::io::Result<()> {
     let comms_channel_tx = comms_channel_tx.clone();
     let comms_channel_rx = comms_channel_rx.clone();
     // Starting a thread which runs the master and starts the necessary threads
-    /* spawn(move || {
+    spawn(move || {
         run_master(elev_num_floors, elevator, poll_period, comms_channel_tx, comms_channel_rx);
-    });*/
+    });
     } 
 
     // New scope so cloned values only stay inside it

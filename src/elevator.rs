@@ -23,6 +23,8 @@ use driver_rust::elevio::poll;
 use driver_rust::elevio::poll::floor_sensor;
 use driver_rust::elevio::poll::CallButton;
 
+use crate::Communication;
+
 // Libraries we have added go below
 use cli_table::{format::Justify, print_stdout, Cell, Style, Table};
 use clearscreen;
@@ -70,14 +72,14 @@ pub const STATUS_MESSAGE: u8 = 0;
 pub const ORDER_TRANSFER: u8 = 1;
 pub const ORDER_ACK: u8 = 2;
 
-#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
-pub struct Communication {
-    pub sender: u8,
-    pub target: u8,
-    pub comm_type: u8,
-    pub status: Option<Status>,
-    pub order: Option<Order>
-}
+// #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
+// pub struct Communication {
+//     pub sender: u8,
+//     pub target: u8,
+//     pub comm_type: u8,
+//     pub status: Option<Status>,
+//     pub order: Option<Order>
+// }
 
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
 pub struct InternalCommunication {
