@@ -24,48 +24,14 @@ use driver_rust::elevio::poll::floor_sensor;
 use driver_rust::elevio::poll::CallButton;
 
 use crate::Communication;
+use crate::Status;
+use crate::Order;
 
 // Libraries we have added go below
 use cli_table::{format::Justify, print_stdout, Cell, Style, Table};
 use clearscreen;
 
 pub const DIRN_STOP_TEMP: u8 = 3;
-
-#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd)]
-pub struct Order {
-    pub floor_number: u8,
-    pub direction: u8
-}
-
-impl Order {
-    pub fn new() -> Self {
-        Order{
-            floor_number: u8::MAX,
-            direction: DIRN_STOP
-        }
-    }
-}
-
-#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd)]
-pub struct Status {
-    pub last_floor: u8,
-    pub direction: u8,
-    pub errors: bool, // Yes or no, any errors
-    pub obstructions: bool, // Yes or no, any obstructions
-    pub target_floor: Option<u8>
-}
-
-impl Status {
-    pub fn new() -> Self {
-        Status{
-            last_floor: u8::MAX,
-            direction: u8::MAX,
-            errors: false,
-            obstructions: false,
-            target_floor: Some(u8::MAX)
-        }
-    }
-}
 
 // Const variables for use in comms
 pub const STATUS_MESSAGE: u8 = 0;
