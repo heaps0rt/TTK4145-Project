@@ -23,7 +23,7 @@ fn cost_of_order(order: Order, status: Status) -> u8 {
 // Sends orders to the elevator
 fn order_up(comms_channel_tx: Sender<Communication>, order_list: HashSet<Order>, status_list: Vec<Status>) -> () {
     let mut cost_of_orders = Vec::new();
-    let mut status_list_copy = status_list.clone();
+    let status_list_copy = status_list.clone();
     for element in &order_list {
         for status in &status_list_copy {
             cost_of_orders.insert(cost_of_orders.len(), cost_of_order(*element, *status));
@@ -51,7 +51,7 @@ fn add_hall_call(internal_order_channel_tx:Sender<InternalCommunication>, call_b
         intention: INSERT,
         order: Some(new_order)
     };
-    internal_order_channel_tx.send(new_comm);
+    internal_order_channel_tx.send(new_comm).unwrap();
     elevator.call_button_light(call_button.floor, call_button.call, true);
 }
 
@@ -70,7 +70,7 @@ fn receive_message(internal_order_channel_tx:Sender<InternalCommunication>, mess
                     intention: DELETE,
                     order: message.order
                 };
-                internal_order_channel_tx.send(new_comm);
+                internal_order_channel_tx.send(new_comm).unwrap();
             }
             3_u8..=u8::MAX => {
                 println!("Feil i meldingssending")
@@ -164,7 +164,7 @@ pub fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration
                         intention: REQUEST_ORDER,
                         order: None
                     };
-                    internal_order_channel_tx.send(request);
+                    internal_order_channel_tx.send(request).unwrap();
                     let order_list = order_list_rx.recv().unwrap();
                     
                     let status_list_r_copy = status_list_r.clone();

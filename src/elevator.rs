@@ -66,7 +66,7 @@ fn opposite_direction_hall(direction: u8) -> u8 {
 }
 
 // Self explanatory, checks what lights are on and turns off the correct ones
-fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () {
+fn check_lights(elevator: Elevator, dirn: u8, floor: u8, num_floors: u8) -> () {
     elevator.call_button_light(floor, e::CAB, false);
     if dirn == e::DIRN_DOWN || floor == (num_floors-1) {
         elevator.call_button_light(floor, e::HALL_DOWN, false);
@@ -78,6 +78,12 @@ fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () 
         elevator.call_button_light(floor, e::HALL_DOWN, false);
         elevator.call_button_light(floor, e::HALL_UP, false);
     }
+}
+
+fn open_door(elevator: &Elevator) -> () {
+    elevator.door_light(true);
+    sleep(Duration::from_millis(3000));
+    elevator.door_light(false);
 }
 
 fn target_floor_function(dirn: u8, destination_list: &HashSet<Order>, last_floor: u8) -> Option<u8> {
@@ -148,11 +154,9 @@ fn check_for_stop(floor: u8, mut dirn: u8, destination_list: HashSet<Order>, ele
                 };
                 internal_order_channel_tx.send(new_comm).unwrap();
 
-                elevator.door_light(true);
-                sleep(Duration::from_millis(3000));
-                elevator.door_light(false);
+                open_door(&elevator);
             }
-            if destination.direction != dirn && floor == target_floor {
+            else if floor == target_floor {
                 elevator_controller_tx.send(DIRN_STOP_TEMP).unwrap();
                 println!("Stopper");
 
@@ -161,10 +165,8 @@ fn check_for_stop(floor: u8, mut dirn: u8, destination_list: HashSet<Order>, ele
                     order: Some(destination)
                 };
                 internal_order_channel_tx.send(new_comm).unwrap();
-
-                elevator.door_light(true);
-                sleep(Duration::from_millis(3000));
-                elevator.door_light(false);
+                
+                open_door(&elevator);
             }
         }
     }
@@ -185,7 +187,7 @@ fn check_for_bottom(mut dirn: u8, floor: u8, elevator: Elevator, elev_num_floors
 }
 
 // Check whether or not to continue
-fn continue_or_not(mut dirn: u8, floor: u8, target_floor: u8, elevator: Elevator, elevator_controller_tx: Sender<u8>) -> () {
+fn continue_or_not(mut dirn: u8, floor: u8, target_floor: u8, elevator: Elevator, elevator_controller_tx: Sender<u8>) -> (u8) {
     if (dirn == e::DIRN_UP && floor < target_floor) || (dirn == e::DIRN_DOWN && floor > target_floor) {
         elevator_controller_tx.send(dirn).unwrap();
     }
@@ -193,6 +195,7 @@ fn continue_or_not(mut dirn: u8, floor: u8, target_floor: u8, elevator: Elevator
         dirn = e::DIRN_STOP;
         elevator_controller_tx.send(dirn).unwrap();
     }
+    return dirn
 }
 
 fn floor_recieved(floor: u8, mut last_floor: u8, elevator: Elevator, elev_num_floors: u8, mut target_floor: u8, internal_order_channel_tx: Sender<InternalCommunication>, elevator_controller_tx: Sender<u8>, elevator_readout_rx: Receiver<u8>, destination_list_rx: Receiver<HashSet<Order>>) -> () {
@@ -219,19 +222,24 @@ fn floor_recieved(floor: u8, mut last_floor: u8, elevator: Elevator, elev_num_fl
                 check_for_bottom(dirn, floor, elevator, elev_num_floors, elevator_controller_tx);
                 }
                 
-                if !destination_list.is_empty(){
+                if !destination_list.is_empty() {
                     let elevator = elevator.clone();
                     let destination_list_copy = destination_list.clone();
                     target_floor = target_floor_function(dirn, &destination_list_copy, last_floor).unwrap();
                     let elevator_controller_tx = elevator_controller_tx.clone();
+                    let internal_order_channel_tx = internal_order_channel_tx.clone();
                     check_for_stop(floor, dirn, destination_list_copy, elevator, last_floor, elev_num_floors, target_floor, internal_order_channel_tx, elevator_controller_tx);
                     }
                 {
-                let elevator = elevator.clone();
+                let elevator_clone = elevator.clone();
                 let elevator_controller_tx = elevator_controller_tx.clone();
-                continue_or_not(dirn, floor, target_floor, elevator, elevator_controller_tx);
+                let dirn = continue_or_not(dirn, floor, target_floor, elevator_clone, elevator_controller_tx);
+                
+                let elevator_clone = elevator.clone();
+                check_lights(elevator_clone, dirn, floor, elev_num_floors);
                 }
-                check_lights(&elevator, dirn, floor, elev_num_floors);
+                
+                
 }
 
 fn elevator_memory(internal_order_channel_rx: Receiver<InternalCommunication>, destination_list_tx: Sender<HashSet<Order>>, elevator_readout_tx: Sender<u8>) -> () {
@@ -283,7 +291,7 @@ fn elevator_controller(elevator_controller_rx: Receiver<u8>, elevator: Elevator,
                     e::DIRN_DOWN|e::DIRN_STOP|e::DIRN_UP => {
                         direction = direction_ordered;
                         elevator.motor_direction(direction);
-                        println!("Retning satt");
+                        println!("Retning satt til {:#?}",direction_to_string(direction));
                         let new_order = Order {
                             floor_number: 0,
                             direction: direction
