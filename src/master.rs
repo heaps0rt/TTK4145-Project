@@ -42,6 +42,7 @@ fn order_up(comms_channel_tx: Sender<Communication>, order_list: HashSet<Order>,
     }
 }
 
+// Sends a hall call to the internal order memory
 fn add_hall_call(internal_order_channel_tx:Sender<InternalCommunication>, call_button:CallButton, elevator:Elevator)-> () {
     let new_order = Order {
         floor_number: call_button.floor,
@@ -55,17 +56,18 @@ fn add_hall_call(internal_order_channel_tx:Sender<InternalCommunication>, call_b
     elevator.call_button_light(call_button.floor, call_button.call, true);
 }
 
+// Recieves external communcations and processes based on the comm_type
 fn receive_message(internal_order_channel_tx:Sender<InternalCommunication>, message: Communication, mut status_list_w: RwLockWriteGuard<'_, Vec<Status>>) -> () {
     if message.target == u8::MAX {
         match message.comm_type {
-            STATUS_MESSAGE => {
+            STATUS_MESSAGE => { // writes status message to the status_list
                 // println!("Received status: {:#?}", message.status);
                 status_list_w[message.sender as usize] = message.status.unwrap();
             }
             ORDER_TRANSFER => {
                 // Message is not for me
             }
-            ORDER_ACK => {
+            ORDER_ACK => { // Sends message to order memory in order to delete acknowledged order.
                 let new_comm = InternalCommunication {
                     intention: DELETE,
                     order: message.order
@@ -79,6 +81,7 @@ fn receive_message(internal_order_channel_tx:Sender<InternalCommunication>, mess
     }
 }
 
+// Order memory that keeps a list of orders to be edited and read through message passing.
 fn order_memory(internal_order_channel_rx: Receiver<InternalCommunication>, order_list_tx: Sender<HashSet<Order>>) -> () {
     let mut order_list: HashSet<Order> = HashSet::new();
     loop {
@@ -117,7 +120,7 @@ pub fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration
         spawn(move || elevio::poll::call_buttons(elevator, call_button_tx, poll_period));
     }
 
-    // Setting up prder set and status list with Rwlock
+    // Setting up status list with Rwlock
     // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
     let mut status_list = RwLock::from(Vec::from([Status::new()]));
 

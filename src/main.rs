@@ -42,6 +42,7 @@ fn main() -> std::io::Result<()> {
     let elevator = elevator.clone();
     let comms_channel_tx = comms_channel_tx.clone();
     let comms_channel_rx = comms_channel_rx.clone();
+    
     // Starting a thread which runs the elevator and starts the necessary threads
     spawn(move || {
         elevator::run_elevator(elev_num_floors, elevator, poll_period, comms_channel_tx, comms_channel_rx);

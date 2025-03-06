@@ -27,6 +27,7 @@ pub use driver_rust::elevio::poll::CallButton;
 pub use cli_table::{format::Justify, print_stdout, Cell, Style, Table};
 pub use clearscreen;
 
+// Structure for a hall order
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd)]
 pub struct Order {
     pub floor_number: u8,
@@ -42,6 +43,7 @@ impl Order {
     }
 }
 
+// Print an order for testing purposes
 pub fn print_order(order: &Order) -> () {
     let floor = order.floor_number;
     let direction = order.direction;
@@ -50,6 +52,7 @@ pub fn print_order(order: &Order) -> () {
 
 }
 
+// Structure for the status of an elevator
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd)]
 pub struct Status {
     pub last_floor: u8,
@@ -71,6 +74,7 @@ impl Status {
     }
 }
 
+// Structure for cross-module communication. (Eventually replaced by networking)
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
 pub struct Communication {
     pub sender: u8,
@@ -85,6 +89,7 @@ pub const STATUS_MESSAGE: u8 = 0;
 pub const ORDER_TRANSFER: u8 = 1;
 pub const ORDER_ACK: u8 = 2;
 
+// Structure for internal communications through message passing
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
 pub struct InternalCommunication {
     pub intention: u8, // use code words defined below

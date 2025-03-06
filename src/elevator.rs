@@ -1,5 +1,6 @@
 use crate::prelude::*;
 
+// Turns a direction const into a string (for testing)
 fn direction_to_string(dirn: u8) -> String {
     match dirn {
         e::DIRN_UP => {
@@ -17,6 +18,7 @@ fn direction_to_string(dirn: u8) -> String {
     }
 }
 
+// Turns an elevator direction const into the corresponding hall direction const
 fn elevdirn_to_halldirn(dirn: u8) -> u8 {
     let mut direction = 0;
     match dirn {
@@ -33,6 +35,7 @@ fn elevdirn_to_halldirn(dirn: u8) -> u8 {
     return direction
 }
 
+// Turns a hall direction const into the corresponding elevator direction const
 fn halldirn_to_elevdirn(dirn: u8) -> u8 {
     let mut direction = 0;
     match dirn {
@@ -49,6 +52,7 @@ fn halldirn_to_elevdirn(dirn: u8) -> u8 {
     return direction
 }
 
+// Turns a hall direction const into the corresponding const in the opposite direction
 fn opposite_direction_hall(direction: u8) -> u8 {
     let mut new_direction = 0;
     match direction {
@@ -65,7 +69,7 @@ fn opposite_direction_hall(direction: u8) -> u8 {
     return new_direction
 }
 
-// Self explanatory, checks what lights are on and turns off the correct ones
+// Turns off the correct lights based on the elevator floor and direction
 fn check_lights(elevator: Elevator, dirn: u8, floor: u8, num_floors: u8) -> () {
     elevator.call_button_light(floor, e::CAB, false);
     if dirn == e::DIRN_DOWN || floor == (num_floors-1) {
@@ -80,12 +84,14 @@ fn check_lights(elevator: Elevator, dirn: u8, floor: u8, num_floors: u8) -> () {
     }
 }
 
+// Opens the door
 fn open_door(elevator: &Elevator) -> () {
     elevator.door_light(true);
     sleep(Duration::from_millis(3000));
     elevator.door_light(false);
 }
 
+// Recieves the destination_list and returns the taget floor; the last destination in our current direction
 fn target_floor_function(dirn: u8, destination_list: &HashSet<Order>, last_floor: u8) -> Option<u8> {
     let mut destination_list_vec = Vec::new();
     let mut destination_list_copy = destination_list.clone();
@@ -198,6 +204,7 @@ fn continue_or_not(mut dirn: u8, floor: u8, target_floor: u8, elevator: Elevator
     return dirn
 }
 
+// When a new foor is passed checks whether we should stop and open the door, then checks whether we should continue
 fn floor_recieved(floor: u8, mut last_floor: u8, elevator: Elevator, elev_num_floors: u8, mut target_floor: u8, internal_order_channel_tx: Sender<InternalCommunication>, elevator_controller_tx: Sender<u8>, elevator_readout_rx: Receiver<u8>, destination_list_rx: Receiver<HashSet<Order>>) -> () {
                 println!("Floor: {:#?}", floor);
                 let new_comm = InternalCommunication {
@@ -214,8 +221,8 @@ fn floor_recieved(floor: u8, mut last_floor: u8, elevator: Elevator, elev_num_fl
                 };
                 internal_order_channel_tx.send(new_comm2).unwrap();
                 let dirn: u8 = elevator_readout_rx.recv().unwrap();
-                println!("Mottat retning: {:#?}", dirn);
-                //println!("Last floor updated to: {:#?}", last_floor);
+                // println!("Mottat retning: {:#?}", dirn);
+                // println!("Last floor updated to: {:#?}", last_floor);
                 {
                 let elevator = elevator.clone();
                 let elevator_controller_tx = elevator_controller_tx.clone();
@@ -242,6 +249,7 @@ fn floor_recieved(floor: u8, mut last_floor: u8, elevator: Elevator, elev_num_fl
                 
 }
 
+// Elevator memory that keeps a destination list and a direction for message passing
 fn elevator_memory(internal_order_channel_rx: Receiver<InternalCommunication>, destination_list_tx: Sender<HashSet<Order>>, elevator_readout_tx: Sender<u8>) -> () {
     let mut destination_list: HashSet<Order> = HashSet::new();
     let mut direction: u8 = e::DIRN_DOWN;
@@ -280,6 +288,7 @@ fn elevator_memory(internal_order_channel_rx: Receiver<InternalCommunication>, d
     }
 }
 
+// Controls the direction of the elevator through the elevator_controller channel
 fn elevator_controller(elevator_controller_rx: Receiver<u8>, elevator: Elevator, internal_order_channel_tx: Sender<InternalCommunication>) -> () {
     let mut direction: u8 = e::DIRN_DOWN;
     loop {
@@ -317,6 +326,7 @@ fn elevator_controller(elevator_controller_rx: Receiver<u8>, elevator: Elevator,
     }
 }
 
+// Handles external communications from master; recieves new orders from master
 fn message_from_master(message: Communication, internal_order_channel_tx: Sender<InternalCommunication>, comms_channel_tx: Sender<Communication>) -> () {
     match message.comm_type {
         STATUS_MESSAGE => {
