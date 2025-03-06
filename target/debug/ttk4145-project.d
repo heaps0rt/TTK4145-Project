@@ -1,1 +1,0 @@
-C:\Users\morte\Downloads\sanntid\New\ folder\target\debug\ttk4145-project.exe: C:\Users\morte\Downloads\sanntid\New\ folder\src\elevator.rs C:\Users\morte\Downloads\sanntid\New\ folder\src\main.rs C:\Users\morte\Downloads\sanntid\New\ folder\src\master.rs C:\Users\morte\Downloads\sanntid\New\ folder\src\prelude.rs
