@@ -6,6 +6,7 @@ pub use std::collections::HashSet;
 pub use std::u8;
 pub use std::sync::*;
 pub use std::cmp::max;
+pub use std::ops::Not;
 
 pub use crossbeam_channel::Receiver;
 pub use crossbeam_channel::Sender;

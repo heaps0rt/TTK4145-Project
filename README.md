@@ -45,9 +45,3 @@ The networking between units will be implemented through a UDP-broadcast master-
 A preliminary design for the general connections of our Master-Slave setup is as follows:
 
 ![master slave](./master-slave.jpg)
-
-## Contributors
-
--   Morten Alterås
--   Walter Brynildsen
--   Raviksan Navaratnarajah

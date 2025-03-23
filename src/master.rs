@@ -2,9 +2,17 @@ use crate::prelude::*;
 
 // Finds the relative distance to an order based on the current target floor.
 fn cost_of_order(order: Order, status: Status) -> u8 {
-    let target_floor = i32::from(status.target_floor.unwrap()); //
+    println!("Finding cost of {:#?}", order);
+    println!("with {:#?}", status);
+
     let last_floor = i32::from(status.last_floor);
     let order_floor = i32::from(order.floor_number);
+
+    if status.target_floor.is_none() {
+        return i32::abs(last_floor - order_floor) as u8;
+    }
+
+    let target_floor = i32::from(status.target_floor.unwrap()); //
     let cost:i32;
     
     // Finds whether the order floor is between last_floor and target_floor, 
@@ -29,7 +37,7 @@ fn order_up(comms_channel_tx: Sender<Communication>, order_list: HashSet<Order>,
             cost_of_orders.insert(cost_of_orders.len(), cost_of_order(*element, *status));
         }
         let max = cost_of_orders.iter().max().unwrap();
-        let max_index = cost_of_orders.iter().position(|part| part == max).unwrap();
+        let max_index = cost_of_orders.iter().enumerate().filter(|&(_, &cost)| cost == *max).map(|(i, _)| i).next().unwrap();
         let new_message = Communication {
             sender: u8::MAX,
             target: max_index as u8,
@@ -37,7 +45,7 @@ fn order_up(comms_channel_tx: Sender<Communication>, order_list: HashSet<Order>,
             status: None,
             order: Some(*element)
         };
-        println!("Sending order: {:#?}", new_message.order);
+        println!("Sending order: {:#?}", new_message);
         comms_channel_tx.send(new_message).unwrap();
     }
 }
@@ -156,7 +164,7 @@ pub fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration
                 receive_message(internal_order_channel_tx, message, status_list_w);
             }
             // This function polls continuously if no other functions have been called
-            default(Duration::from_millis(5)) => {
+            default(Duration::from_millis(500)) => {
                 // Opening status list for reading
                 let status_list_r = status_list.read().unwrap();
 
@@ -173,6 +181,7 @@ pub fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration
                     let status_list_r_copy = status_list_r.clone();
                     let comms_channel_tx = comms_channel_tx.clone();
                     // Calling ordering function
+                    if order_list.is_empty().not() {println!("Ordering up with order_list{:#?}", order_list);}
                     order_up(comms_channel_tx, order_list, status_list_r_copy);
                 }
                 // println!("{:#?}", status_list);

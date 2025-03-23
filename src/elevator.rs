@@ -328,6 +328,7 @@ fn elevator_controller(elevator_controller_rx: Receiver<u8>, elevator: Elevator,
 
 // Handles external communications from master; recieves new orders from master
 fn message_from_master(message: Communication, internal_order_channel_tx: Sender<InternalCommunication>, comms_channel_tx: Sender<Communication>) -> () {
+    println!("Recieved {:#?}", message);
     match message.comm_type {
         STATUS_MESSAGE => {
             // Message is not for me
@@ -453,6 +454,7 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
             recv(comms_channel_rx) -> a => {
                 let message = a.unwrap();
                 if message.target == 0 {
+                    println!("Comms Recieved {:#?}", message);
                     let internal_order_channel_tx = internal_order_channel_tx.clone();
                     let comms_channel_tx = comms_channel_tx.clone();
                     spawn (move || message_from_master(message, internal_order_channel_tx, comms_channel_tx));
