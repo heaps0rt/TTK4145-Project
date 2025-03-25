@@ -1,1 +1,0 @@
-C:\Users\morte\Desktop\TTK4145\target\debug\ttk4145-project.exe: C:\Users\morte\Desktop\TTK4145\src\elevator.rs C:\Users\morte\Desktop\TTK4145\src\main.rs C:\Users\morte\Desktop\TTK4145\src\master.rs C:\Users\morte\Desktop\TTK4145\src\prelude.rs C:\Users\morte\Desktop\TTK4145\src\utils.rs
