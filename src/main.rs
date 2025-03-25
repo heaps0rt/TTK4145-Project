@@ -3,6 +3,7 @@ use prelude::*;
 
 mod elevator;
 mod master;
+mod utils;
 
 fn main() -> std::io::Result<()> {
     // Setting up durations for later use
@@ -17,7 +18,7 @@ fn main() -> std::io::Result<()> {
     println!("Elevator started:\n{:#?}", elevator);
 
     // Set up communication channel, this is just a substitute for network communication we will implement later
-    let (comms_channel_tx, comms_channel_rx) = cbc::bounded::<Communication>(1); 
+    let (comms_channel_tx, comms_channel_rx) = cbc::unbounded::<Communication>(); 
 
     // Set poll period for buttons and sensors
     let poll_period = Duration::from_millis(25);

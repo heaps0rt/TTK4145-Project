@@ -1,73 +1,5 @@
 use crate::prelude::*;
-
-// Turns a direction const into a string (for testing)
-fn direction_to_string(dirn: u8) -> String {
-    match dirn {
-        e::DIRN_UP => {
-            return String::from("Oppover");
-        }
-        e::DIRN_DOWN => {
-            return String::from("Nedover");
-        }
-        e::DIRN_STOP => {
-            return String::from("Stoppet");
-        }
-        2_u8..=254_u8 => {
-            return String::from("Ukjent");
-        }
-    }
-}
-
-// Turns an elevator direction const into the corresponding hall direction const
-fn elevdirn_to_halldirn(dirn: u8) -> u8 {
-    let mut direction = 0;
-    match dirn {
-        e::DIRN_DOWN => {
-            direction = e::HALL_DOWN;
-        }
-        e::DIRN_UP => {
-            direction = e::HALL_UP;
-        }
-        0|2_u8..=254_u8 => {
-            println!("Can't convert direction");
-        }
-    }
-    return direction
-}
-
-// Turns a hall direction const into the corresponding elevator direction const
-fn halldirn_to_elevdirn(dirn: u8) -> u8 {
-    let mut direction = 0;
-    match dirn {
-        e::HALL_DOWN => {
-            direction = e::DIRN_DOWN;
-        }
-        e::HALL_UP => {
-            direction = e::DIRN_UP;
-        }
-        2_u8..=u8::MAX => {
-            println!("Can't convert direction");
-        }
-    }
-    return direction
-}
-
-// Turns a hall direction const into the corresponding const in the opposite direction
-fn opposite_direction_hall(direction: u8) -> u8 {
-    let mut new_direction = 0;
-    match direction {
-        e::HALL_UP => {
-            new_direction = e::HALL_DOWN;
-        }
-        e::HALL_DOWN => {
-            new_direction = e::HALL_UP;
-        }
-        2_u8..=u8::MAX => {
-            println!("Can't invert direction");
-        }
-    }
-    return new_direction
-}
+use crate::utils::*;
 
 // Turns off the correct lights based on the elevator floor and direction
 fn check_lights(elevator: Elevator, dirn: u8, floor: u8, num_floors: u8) -> () {
@@ -92,10 +24,9 @@ fn open_door(elevator: &Elevator) -> () {
 }
 
 // Recieves the destination_list and returns the taget floor; the last destination in our current direction
-fn target_floor_function(dirn: u8, destination_list: &HashSet<Order>, last_floor: u8) -> Option<u8> {
+fn target_floor_function(dirn: u8, destination_list: HashSet<Order>, last_floor: u8) -> Option<u8> {
     let mut destination_list_vec = Vec::new();
-    let mut destination_list_copy = destination_list.clone();
-    for order in destination_list_copy {
+    for order in destination_list {
         destination_list_vec.insert(0, order.floor_number);
     }
     match dirn {
@@ -117,7 +48,7 @@ fn target_floor_function(dirn: u8, destination_list: &HashSet<Order>, last_floor
     }
 }
 
-// Does what it says on the tin. Handles cab orders.
+// Handles cab orders.
 fn handle_cab_order (call_button: CallButton, last_floor: u8, elevator: Elevator, internal_order_channel_tx: Sender<InternalCommunication>) -> () {
     if call_button.floor < last_floor {
         let new_order = Order {
@@ -146,9 +77,18 @@ fn handle_cab_order (call_button: CallButton, last_floor: u8, elevator: Elevator
 }
 
 // Check if we need to stop
-fn check_for_stop(floor: u8, mut dirn: u8, destination_list: HashSet<Order>, elevator: Elevator, last_floor: u8, elev_num_floors: u8, target_floor: u8, internal_order_channel_tx: Sender<InternalCommunication>, elevator_controller_tx: Sender<u8>) -> () {
-    let mut destination_list_copy = destination_list.clone();
-    for destination in destination_list_copy {
+fn check_for_stop(
+    floor: u8,
+    mut dirn: u8,
+    destination_list: HashSet<Order>,
+    elevator: Elevator,
+    last_floor: u8,
+    elev_num_floors: u8,
+    target_floor: u8,
+    internal_order_channel_tx: Sender<InternalCommunication>,
+    elevator_controller_tx: Sender<u8>
+) -> () {
+    for destination in destination_list {
         if destination.floor_number == floor {
             if halldirn_to_elevdirn(destination.direction) == dirn {
                 elevator_controller_tx.send(DIRN_STOP_TEMP).unwrap();
@@ -232,7 +172,8 @@ fn floor_recieved(floor: u8, mut last_floor: u8, elevator: Elevator, elev_num_fl
                 if !destination_list.is_empty() {
                     let elevator = elevator.clone();
                     let destination_list_copy = destination_list.clone();
-                    target_floor = target_floor_function(dirn, &destination_list_copy, last_floor).unwrap();
+                    target_floor = target_floor_function(dirn, destination_list_copy, last_floor).unwrap();
+                    let destination_list_copy = destination_list.clone();
                     let elevator_controller_tx = elevator_controller_tx.clone();
                     let internal_order_channel_tx = internal_order_channel_tx.clone();
                     check_for_stop(floor, dirn, destination_list_copy, elevator, last_floor, elev_num_floors, target_floor, internal_order_channel_tx, elevator_controller_tx);
@@ -281,15 +222,15 @@ fn elevator_memory(internal_order_channel_rx: Receiver<InternalCommunication>, d
                     }
                 }
             }
-            default(Duration::from_millis(100)) => {
-                //Chiller
-            }
+            // default(Duration::from_millis(100)) => {
+            //     //Chiller
+            // }
         }
     }
 }
 
 // Controls the direction of the elevator through the elevator_controller channel
-fn elevator_controller(elevator_controller_rx: Receiver<u8>, elevator: Elevator, internal_order_channel_tx: Sender<InternalCommunication>) -> () {
+fn handle_elevator_controller(elevator_controller_rx: Receiver<u8>, elevator: Elevator, internal_order_channel_tx: Sender<InternalCommunication>) -> () {
     let mut direction: u8 = e::DIRN_DOWN;
     loop {
         cbc::select! {
@@ -327,7 +268,7 @@ fn elevator_controller(elevator_controller_rx: Receiver<u8>, elevator: Elevator,
 }
 
 // Handles external communications from master; recieves new orders from master
-fn message_from_master(message: Communication, internal_order_channel_tx: Sender<InternalCommunication>, comms_channel_tx: Sender<Communication>) -> () {
+fn handle_message_from_master(message: Communication, internal_order_channel_tx: Sender<InternalCommunication>, comms_channel_tx: Sender<Communication>) -> () {
     println!("Recieved {:#?}", message);
     match message.comm_type {
         STATUS_MESSAGE => {
@@ -355,6 +296,82 @@ fn message_from_master(message: Communication, internal_order_channel_tx: Sender
         3_u8..=u8::MAX => {
             println!("Feil i meldingssending")
         }
+    }
+}
+
+fn send_elevator_startup(last_floor:u8,direction: u8,destination_list_copy: HashSet<Order>,elevator_controller_tx:Sender<u8>)->() {
+    if direction == e::DIRN_STOP {
+        if !destination_list_copy.is_empty() {
+            for destination in destination_list_copy{
+                if destination.floor_number > last_floor {
+                    elevator_controller_tx.send(e::DIRN_UP).unwrap();
+                    println!("Kjører");
+                    break;
+                }
+                if destination.floor_number < last_floor {
+                    elevator_controller_tx.send(e::DIRN_DOWN).unwrap();
+                    println!("Kjører");
+                    break;
+                }
+            }
+        }
+    };
+}
+
+// Create and send status to master
+fn send_status_update(last_floor:u8,direction: u8,destination_list: HashSet<Order>,comms_channel_tx:Sender<Communication>)->() {
+    // println!("{:#?}", destination_list_r);
+    
+    let current_status = Status {
+        last_floor: last_floor,
+        direction: direction,
+        errors: false,
+        obstructions: false,
+        target_floor: target_floor_function(direction, destination_list, last_floor)
+    };
+    
+    let new_message = Communication {
+        sender: 0,
+        target: u8::MAX,
+        comm_type: STATUS_MESSAGE,
+        status: Some(current_status),
+        order: None
+    };
+    comms_channel_tx.send(new_message).unwrap();
+}
+
+// Status update readout, mostly for debugging
+fn readout_status(last_floor:u8,direction: u8,destination_list: HashSet<Order>,last_last_floor: &mut u8,last_destination_list: &mut HashSet<Order>)->() {
+    let mut destinations_up: HashSet<u8> = HashSet::new();
+    let mut destinations_down: HashSet<u8> = HashSet::new();
+
+    for element in &destination_list {
+        if element.direction == e::HALL_UP {
+            destinations_up.insert(element.floor_number);
+        }
+        else if element.direction == e::HALL_DOWN {
+            destinations_down.insert(element.floor_number);
+        }
+    }
+    
+    if destination_list != *last_destination_list || last_floor != *last_last_floor {
+        *last_destination_list = destination_list.clone();
+        *last_last_floor = last_floor.clone();
+        clearscreen::clear().unwrap();
+        let table = vec![
+        vec!["Etasje".cell(), last_floor.cell().justify(Justify::Right)],
+        vec!["Retning".cell(), direction_to_string(direction).cell().justify(Justify::Right)],
+        vec!["Destinasjoner opp".cell(), format!("{:#?}", destinations_up.clone()).cell().justify(Justify::Right)],
+        vec!["Destinasjoner ned".cell(), format!("{:#?}", destinations_down.clone()).cell().justify(Justify::Right)],
+        ]
+        .table()
+        .title(vec![
+            "Variabel".cell().bold(true),
+            "Verdi".cell().bold(true),
+        ])
+        .bold(true);
+
+        assert!(print_stdout(table).is_ok());
     }
 }
 
@@ -394,19 +411,18 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
     
     // Set up variable to remember what floor we were last at
     let mut last_floor: u8 = elev_num_floors+1;
-    let mut last_last_floor: u8 = 0;
+    
     let mut target_floor: u8 = 0;
 
-    // Setting up destination set with Rwlock
-    // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
-    //let mut destination_list:RwLock<HashSet<Order>> = RwLock::from(HashSet::new());
+    // Setting up last_last variables for the purposes of readout function
     let mut last_destination_list: HashSet<Order> = HashSet::new();
+    let mut last_last_floor: u8 = 0;
 
-    let (internal_order_channel_tx, internal_order_channel_rx) = cbc::unbounded();
-    let (destination_list_tx, destination_list_rx) = cbc::unbounded();
+    let (internal_order_channel_tx, internal_order_channel_rx) = cbc::bounded(1);
+    let (destination_list_tx, destination_list_rx) = cbc::bounded(1);
 
-    let (elevator_controller_tx, elevator_controller_rx) = cbc::unbounded();
-    let (elevator_readout_tx, elevator_readout_rx) = cbc::unbounded::<u8>();
+    let (elevator_controller_tx, elevator_controller_rx) = cbc::bounded(1);
+    let (elevator_readout_tx, elevator_readout_rx) = cbc::bounded::<u8>(1);
 
     {
     let elevator_readout_tx = elevator_readout_tx.clone();
@@ -419,7 +435,7 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
     let elevator = elevator.clone();
     let elevator_controller_rx = elevator_controller_rx.clone();
     let internal_order_channel_tx = internal_order_channel_tx.clone();
-    spawn(move || elevator_controller(elevator_controller_rx, elevator, internal_order_channel_tx));
+    spawn(move || handle_elevator_controller(elevator_controller_rx, elevator, internal_order_channel_tx));
     }
 
     // The main running loop of the elevator
@@ -457,44 +473,18 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
                     println!("Comms Recieved {:#?}", message);
                     let internal_order_channel_tx = internal_order_channel_tx.clone();
                     let comms_channel_tx = comms_channel_tx.clone();
-                    spawn (move || message_from_master(message, internal_order_channel_tx, comms_channel_tx));
+                    spawn (move || handle_message_from_master(message, internal_order_channel_tx, comms_channel_tx));
                 }
             }
             // This function polls continuously
-            default(Duration::from_millis(100)) => {
-
+            default(Duration::from_millis(1000)) => {
+                
                 let new_comm2 = InternalCommunication {
                     intention: REQUEST_DIRECTION,
                     order: None
                 };
                 internal_order_channel_tx.send(new_comm2).unwrap();
                 let direction = elevator_readout_rx.recv().unwrap();
-                if direction == e::DIRN_STOP {
-                    let new_comm = InternalCommunication {
-                        intention: REQUEST_DESTINATION,
-                        order: None
-                    };
-                    internal_order_channel_tx.send(new_comm).unwrap();
-                    let a = destination_list_rx.recv();
-                    let destination_list_copy = a.unwrap();
-
-                    if !destination_list_copy.is_empty() {
-                        for destination in &destination_list_copy{
-                            if destination.floor_number > last_floor {
-                                elevator_controller_tx.send(e::DIRN_UP).unwrap();
-                                println!("Kjører");
-                                break;
-                            }
-                            if destination.floor_number < last_floor {
-                                elevator_controller_tx.send(e::DIRN_DOWN).unwrap();
-                                println!("Kjører");
-                                break;
-                            }
-                        }
-                    }
-                };
-                    
-
                 
                 let new_comm = InternalCommunication {
                     intention: REQUEST_DESTINATION,
@@ -502,57 +492,21 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
                 };
                 internal_order_channel_tx.send(new_comm).unwrap();
                 let a = destination_list_rx.recv();
-                let destination_list_copy = a.unwrap();
-                // println!("{:#?}", destination_list_r);
-                // Create and send status to master
-                let current_status = Status {
-                    last_floor: last_floor,
-                    direction: direction,
-                    errors: false,
-                    obstructions: false,
-                    target_floor: target_floor_function(direction, &destination_list_copy, last_floor)
-                };
-                
-                let new_message = Communication {
-                    sender: 0,
-                    target: u8::MAX,
-                    comm_type: STATUS_MESSAGE,
-                    status: Some(current_status),
-                    order: None
-                };
-                comms_channel_tx.send(new_message).unwrap();
-                
-                // Status update readout, mostly for debugging
-                let mut destinations_up: HashSet<u8> = HashSet::new();
-                let mut destinations_down: HashSet<u8> = HashSet::new();
-
-                for element in &destination_list_copy {
-                    if element.direction == e::HALL_UP {
-                        destinations_up.insert(element.floor_number);
-                    }
-                    else if element.direction == e::HALL_DOWN {
-                        destinations_down.insert(element.floor_number);
-                    }
+                let destination_list = a.unwrap();
+        
+                {
+                let destination_list_copy = destination_list.clone();
+                let elevator_controller_tx = elevator_controller_tx.clone();
+                send_elevator_startup(last_floor,direction,destination_list_copy,elevator_controller_tx);
                 }
-                
-                if destination_list_copy != last_destination_list || last_floor != last_last_floor {
-                    last_destination_list = destination_list_copy.clone();
-                    last_last_floor = last_floor.clone();
-                    clearscreen::clear().unwrap();
-                    let table = vec![
-                    vec!["Etasje".cell(), last_floor.cell().justify(Justify::Right)],
-                    vec!["Retning".cell(), direction_to_string(direction).cell().justify(Justify::Right)],
-                    vec!["Destinasjoner opp".cell(), format!("{:#?}", destinations_up.clone()).cell().justify(Justify::Right)],
-                    vec!["Destinasjoner ned".cell(), format!("{:#?}", destinations_down.clone()).cell().justify(Justify::Right)],
-                    ]
-                    .table()
-                    .title(vec![
-                        "Variabel".cell().bold(true),
-                        "Verdi".cell().bold(true),
-                    ])
-                    .bold(true);
-
-                    assert!(print_stdout(table).is_ok());
+                {
+                let destination_list_copy = destination_list.clone();
+                let comms_channel_tx = comms_channel_tx.clone();
+                send_status_update(last_floor,direction,destination_list_copy,comms_channel_tx);
+                }
+                {
+                let destination_list_copy = destination_list.clone();
+                readout_status(last_floor, direction, destination_list_copy,&mut last_last_floor,&mut last_destination_list);
                 }
             }
         }
