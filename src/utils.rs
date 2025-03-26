@@ -68,3 +68,40 @@ pub fn opposite_direction_hall(direction: u8) -> u8 {
     }
     return new_direction
 }
+
+// Recieves the destination_list and returns the target floor; the last destination in our current direction
+pub fn target_floor_function(dirn: u8, destination_list: HashSet<Order>, last_floor: u8) -> Option<u8> {
+    // print!("\nTARGET FLOOR\n");
+    // print!("dirn  {:#?}\n",dirn);
+    // print!("destination_list  {:#?}\n",destination_list);
+    // print!("last_floor  {:#?}\n",last_floor);
+    
+    if destination_list.is_empty() {
+        return None;
+    }
+
+    let mut destination_list_vec = Vec::new();
+    for order in destination_list {
+        destination_list_vec.insert(0, order.floor_number);
+    }
+    match dirn {
+        e::DIRN_UP => {
+            let target_floor = destination_list_vec.iter().max();
+            // println!("TARGET: {:#?}",target_floor.copied());
+            return target_floor.copied();
+        }
+        e::DIRN_DOWN => {
+            let target_floor = destination_list_vec.iter().min();
+            // println!("TARGET: {:#?}",target_floor.copied());
+            return target_floor.copied();
+        }
+        e::DIRN_STOP => {
+            // println!("TARGET: {:#?}",Some(last_floor));
+            return Some(last_floor);
+        }
+        2_u8..=254_u8 => {
+            println!("Error getting target floor");
+            return Some(last_floor);
+        }
+    }
+}

@@ -1,80 +1,83 @@
 use crate::prelude::*;
 use crate::utils::*;
 
-// Turns off the correct lights based on the elevator floor and direction
-fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () {
-    elevator.call_button_light(floor, e::CAB, false);
-    if (dirn == e::DIRN_DOWN) || (floor == (num_floors-1)) {
-        elevator.call_button_light(floor, e::HALL_DOWN, false);
-    }
-    else if (dirn == e::DIRN_UP) || (floor == 0) {
-        elevator.call_button_light(floor, e::HALL_UP, false);
-    }
-    else if (dirn == e::DIRN_STOP) {
-        elevator.call_button_light(floor, e::HALL_DOWN, false);
-        elevator.call_button_light(floor, e::HALL_UP, false);
+// When a new foor is passed checks whether we should stop and open the door, then checks whether we should continue
+fn floor_recieved(
+    floor: u8,
+    last_floor: u8,
+    elevator: Elevator,
+    elev_num_floors: u8,
+    internal_order_channel_tx: Sender<InternalCommunication>,
+    elevator_controller_tx: Sender<u8>,
+    elevator_readout_rx: Receiver<u8>,
+    destination_list_rx: Receiver<HashSet<Order>>
+) -> () {
+                println!("Floor: {:#?}", floor);
+                let new_comm = InternalCommunication {
+                    intention: REQUEST_DESTINATION,
+                    order: None
+                };
+                internal_order_channel_tx.send(new_comm).unwrap();
+                let a = destination_list_rx.recv();
+                let destination_list = a.unwrap();
+
+                let new_comm2 = InternalCommunication {
+                    intention: REQUEST_DIRECTION,
+                    order: None
+                };
+                internal_order_channel_tx.send(new_comm2).unwrap();
+                let dirn: u8 = elevator_readout_rx.recv().unwrap();
+                // println!("Mottat retning: {:#?}", dirn);
+                // println!("Last floor updated to: {:#?}", last_floor);
+                {
+                let elevator_controller_tx = elevator_controller_tx.clone();
+                check_for_bottom(dirn, floor, elev_num_floors, elevator_controller_tx);
+                }
+                
+                // First we find our target floor
+                let destination_list_copy = destination_list.clone();
+                let target_floor = target_floor_function(dirn, destination_list_copy, last_floor).unwrap_or(floor);
+
+                // Secondly we find our heading after the current floor; up, down, or stop
+                let heading = check_continue_or_not(dirn, floor, target_floor);
+
+                if !destination_list.is_empty() {
+                    let destination_list = destination_list.clone();
+                    let elevator_controller_tx = elevator_controller_tx.clone();
+                    let internal_order_channel_tx = internal_order_channel_tx.clone();
+                    if check_for_stop(floor, dirn, destination_list, target_floor, internal_order_channel_tx, elevator_controller_tx) {
+                        // Open the door during temp_stop and check lights
+                        elevator.door_light(true);
+                        check_lights(&elevator, heading, floor, elev_num_floors);
+                        sleep(Duration::from_millis(3000));
+                        elevator.door_light(false);
+                    }
+                }
+                elevator_controller_tx.send(heading).unwrap();
+}
+
+// Check if we're at the bottom of the elevator
+fn check_for_bottom(dirn: u8, floor: u8, elev_num_floors: u8, elevator_controller_tx: Sender<u8>) -> () {
+    println!("Retning: {:#?}", dirn);
+    println!("Etasje: {:#?}", floor);
+    if (dirn == e::DIRN_UP && floor == (elev_num_floors-1))
+    || (dirn == e::DIRN_DOWN && floor == 0) {
+        elevator_controller_tx.send(e::DIRN_STOP).unwrap();
+        println!("CHECKFORBOTTOM stopping");
     }
 }
 
-// Recieves the destination_list and returns the target floor; the last destination in our current direction
-fn target_floor_function(dirn: u8, destination_list: HashSet<Order>, last_floor: u8) -> Option<u8> {
-    // print!("\nTARGET FLOOR\n");
+// Returns the next heading
+fn check_continue_or_not(dirn: u8, floor: u8, target_floor: u8) -> (u8) {
+    // print!("\nCHECK_CONTINUE\n");
     // print!("dirn  {:#?}\n",dirn);
-    // print!("destination_list  {:#?}\n",destination_list);
-    // print!("last_floor  {:#?}\n",last_floor);
-    
-    let mut destination_list_vec = Vec::new();
-    for order in destination_list {
-        destination_list_vec.insert(0, order.floor_number);
+    // print!("floor  {:#?}\n",floor);
+    // print!("target_floor  {:#?}\n",target_floor);
+    if (dirn == e::DIRN_UP && floor < target_floor) || (dirn == e::DIRN_DOWN && floor > target_floor) {
+        return dirn;
     }
-    match dirn {
-        e::DIRN_UP => {
-            let target_floor = destination_list_vec.iter().max();
-            // println!("TARGET: {:#?}",target_floor.copied());
-            return target_floor.copied();
-        }
-        e::DIRN_DOWN => {
-            let target_floor = destination_list_vec.iter().min();
-            // println!("TARGET: {:#?}",target_floor.copied());
-            return target_floor.copied();
-        }
-        e::DIRN_STOP => {
-            // println!("TARGET: {:#?}",Some(last_floor));
-            return Some(last_floor);
-        }
-        2_u8..=254_u8 => {
-            println!("Error getting target floor");
-            return Some(last_floor);
-        }
-    }
-}
-
-// Handles cab orders.
-fn handle_cab_order (call_button: CallButton, last_floor: u8, elevator: Elevator, internal_order_channel_tx: Sender<InternalCommunication>) -> () {
-    if call_button.floor < last_floor {
-        let new_order = Order {
-            floor_number: call_button.floor,
-            direction: e::HALL_DOWN
-        };
-        let new_comm = InternalCommunication {
-            intention: INSERT,
-            order: Some(new_order)
-        };
-        internal_order_channel_tx.send(new_comm).unwrap();
-        elevator.call_button_light(call_button.floor, call_button.call, true);
-    }
-    else if call_button.floor >= last_floor {
-        let new_order = Order {
-            floor_number: call_button.floor,
-            direction: e::HALL_UP
-        };
-        let new_comm = InternalCommunication {
-            intention: INSERT,
-            order: Some(new_order)
-        };
-        internal_order_channel_tx.send(new_comm).unwrap();
-        elevator.call_button_light(call_button.floor, call_button.call, true);
-    }  
+    println!("CHECKCONTINUE stopping");
+    return e::DIRN_STOP;
 }
 
 // Check if we need to stop
@@ -105,84 +108,47 @@ fn check_for_stop(
     return false;
 }
 
-// Check if we're at the bottom of the elevator
-fn check_for_bottom(dirn: u8, floor: u8, elev_num_floors: u8, elevator_controller_tx: Sender<u8>) -> () {
-    println!("Retning: {:#?}", dirn);
-    println!("Etasje: {:#?}", floor);
-    if (dirn == e::DIRN_UP && floor == (elev_num_floors-1))
-    || (dirn == e::DIRN_DOWN && floor == 0) {
-        elevator_controller_tx.send(e::DIRN_STOP).unwrap();
-        println!("CHECKFORBOTTOM stopping");
+// Turns off the correct lights based on the elevator floor and direction
+fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () {
+    elevator.call_button_light(floor, e::CAB, false);
+    if (dirn == e::DIRN_DOWN) || (floor == (num_floors-1)) {
+        elevator.call_button_light(floor, e::HALL_DOWN, false);
+    }
+    else if (dirn == e::DIRN_UP) || (floor == 0) {
+        elevator.call_button_light(floor, e::HALL_UP, false);
+    }
+    else if (dirn == e::DIRN_STOP) {
+        elevator.call_button_light(floor, e::HALL_DOWN, false);
+        elevator.call_button_light(floor, e::HALL_UP, false);
     }
 }
 
-// Returns the next heading
-fn check_continue_or_not(dirn: u8, floor: u8, target_floor: u8) -> (u8) {
-    // print!("\nCHECK_CONTINUE\n");
-    // print!("dirn  {:#?}\n",dirn);
-    // print!("floor  {:#?}\n",floor);
-    // print!("target_floor  {:#?}\n",target_floor);
-    if (dirn == e::DIRN_UP && floor < target_floor) || (dirn == e::DIRN_DOWN && floor > target_floor) {
-        return dirn;
+// Handles cab orders.
+fn handle_cab_order (call_button: CallButton, last_floor: u8, elevator: Elevator, internal_order_channel_tx: Sender<InternalCommunication>) -> () {
+    if call_button.floor < last_floor {
+        let new_order = Order {
+            floor_number: call_button.floor,
+            direction: e::HALL_DOWN
+        };
+        let new_comm = InternalCommunication {
+            intention: INSERT,
+            order: Some(new_order)
+        };
+        internal_order_channel_tx.send(new_comm).unwrap();
+        elevator.call_button_light(call_button.floor, call_button.call, true);
     }
-    println!("CHECKCONTINUE stopping");
-    return e::DIRN_STOP;
-}
-
-// When a new foor is passed checks whether we should stop and open the door, then checks whether we should continue
-fn floor_recieved(
-    floor: u8,
-    last_floor: u8,
-    elevator: Elevator,
-    elev_num_floors: u8,
-    mut target_floor: u8,
-    internal_order_channel_tx: Sender<InternalCommunication>,
-    elevator_controller_tx: Sender<u8>,
-    elevator_readout_rx: Receiver<u8>,
-    destination_list_rx: Receiver<HashSet<Order>>
-) -> () {
-                println!("Floor: {:#?}", floor);
-                let new_comm = InternalCommunication {
-                    intention: REQUEST_DESTINATION,
-                    order: None
-                };
-                internal_order_channel_tx.send(new_comm).unwrap();
-                let a = destination_list_rx.recv();
-                let destination_list = a.unwrap();
-
-                let new_comm2 = InternalCommunication {
-                    intention: REQUEST_DIRECTION,
-                    order: None
-                };
-                internal_order_channel_tx.send(new_comm2).unwrap();
-                let dirn: u8 = elevator_readout_rx.recv().unwrap();
-                // println!("Mottat retning: {:#?}", dirn);
-                // println!("Last floor updated to: {:#?}", last_floor);
-                {
-                let elevator_controller_tx = elevator_controller_tx.clone();
-                check_for_bottom(dirn, floor, elev_num_floors, elevator_controller_tx);
-                }
-                
-                // First we find our target floor
-                let destination_list_copy = destination_list.clone();
-                let target_floor = target_floor_function(dirn, destination_list_copy, last_floor).unwrap();
-
-                // Secondly we find our heading after the current floor; up, down, or stop
-                let heading = check_continue_or_not(dirn, floor, target_floor);
-
-                if !destination_list.is_empty() {
-                    let destination_list = destination_list.clone();
-                    let elevator_controller_tx = elevator_controller_tx.clone();
-                    let internal_order_channel_tx = internal_order_channel_tx.clone();
-                    if check_for_stop(floor, dirn, destination_list, target_floor, internal_order_channel_tx, elevator_controller_tx) {
-                        // Open the door during temp_stop and check lights
-                        elevator.door_light(true);
-                        check_lights(&elevator, heading, floor, elev_num_floors);
-                        sleep(Duration::from_millis(3000));
-                        elevator.door_light(false);
-                    }
-                }
-                elevator_controller_tx.send(heading).unwrap();
+    else if call_button.floor >= last_floor {
+        let new_order = Order {
+            floor_number: call_button.floor,
+            direction: e::HALL_UP
+        };
+        let new_comm = InternalCommunication {
+            intention: INSERT,
+            order: Some(new_order)
+        };
+        internal_order_channel_tx.send(new_comm).unwrap();
+        elevator.call_button_light(call_button.floor, call_button.call, true);
+    }  
 }
 
 // Elevator memory that keeps a destination list and a direction for message passing
@@ -459,7 +425,7 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
                 let elevator_controller_tx = elevator_controller_tx.clone();
                 let elevator_readout_rx = elevator_readout_rx.clone();
                 let destination_list_rx = destination_list_rx.clone();
-                spawn(move || floor_recieved(floor, last_floor, elevator, elev_num_floors, target_floor, internal_order_channel_tx, elevator_controller_tx, elevator_readout_rx, destination_list_rx));
+                spawn(move || floor_recieved(floor, last_floor, elevator, elev_num_floors, internal_order_channel_tx, elevator_controller_tx, elevator_readout_rx, destination_list_rx));
                 }
             }
             // Get info from comms_channel and process according to status if it is meant for us
@@ -474,7 +440,6 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
             }
             // This function polls continuously
             default(Duration::from_millis(1000)) => {
-                
                 let new_comm2 = InternalCommunication {
                     intention: REQUEST_DIRECTION,
                     order: None
