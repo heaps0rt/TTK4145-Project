@@ -7,6 +7,7 @@ pub use std::u8;
 pub use std::sync::*;
 pub use std::cmp::max;
 pub use std::ops::Not;
+pub use serde::{Serialize,Deserialize};
 
 pub use crossbeam_channel::Receiver;
 pub use crossbeam_channel::Sender;
@@ -54,7 +55,7 @@ pub fn print_order(order: &Order) -> () {
 }
 
 // Structure for the status of an elevator
-#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd)]
+#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd, Serialize, Deserialize)]
 pub struct Status {
     pub last_floor: u8,
     pub direction: u8,

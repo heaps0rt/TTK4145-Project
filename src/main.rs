@@ -4,6 +4,7 @@ use prelude::*;
 mod elevator;
 mod master;
 mod utils;
+mod networking;
 
 fn main() -> std::io::Result<()> {
     // Setting up durations for later use
@@ -14,7 +15,7 @@ fn main() -> std::io::Result<()> {
     let elev_num_floors = 4;
 
     // Initialize and connect elevator
-    let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?; 
+    let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?;
     println!("Elevator started:\n{:#?}", elevator);
 
     // Set up communication channel, this is just a substitute for network communication we will implement later
