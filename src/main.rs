@@ -1,12 +1,7 @@
-mod prelude;
-use prelude::*;
+use ttk4145_project::prelude::*;
+use ttk4145_project::network::server::*;
 
-mod elevator;
-mod master;
-mod utils;
-mod networking;
-
-fn main() -> std::io::Result<()> {
+fn main() -> std::io::Result<()>{
     // Setting up durations for later use
     let five_hundred_millis = Duration::from_millis(500);
     let now = Instant::now();
@@ -18,8 +13,13 @@ fn main() -> std::io::Result<()> {
     let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?;
     println!("Elevator started:\n{:#?}", elevator);
 
+    // Initialize network unit
+    let network_unit = NetworkUnit::new(1);
+
     // Set up communication channel, this is just a substitute for network communication we will implement later
-    let (comms_channel_tx, comms_channel_rx) = cbc::unbounded::<Communication>(); 
+    let (comms_channel_tx, comms_channel_rx) = cbc::unbounded::<Communication>();
+
+    let (network_channel_tx, network_channel_rx) = cbc::unbounded::<Communication>(); 
 
     // Set poll period for buttons and sensors
     let poll_period = Duration::from_millis(25);
@@ -33,7 +33,7 @@ fn main() -> std::io::Result<()> {
     let comms_channel_rx = comms_channel_rx.clone();
     // Starting a thread which runs the master and starts the necessary threads
     spawn(move || {
-        master::run_master(elev_num_floors, elevator, poll_period, comms_channel_tx, comms_channel_rx);
+        ttk4145_project::client::master::run_master(comms_channel_tx, comms_channel_rx);
     });
     } 
 
@@ -47,7 +47,7 @@ fn main() -> std::io::Result<()> {
     
     // Starting a thread which runs the elevator and starts the necessary threads
     spawn(move || {
-        elevator::run_elevator(elev_num_floors, elevator, poll_period, comms_channel_tx, comms_channel_rx);
+        ttk4145_project::client::elevator::run_elevator(elev_num_floors, elevator, poll_period, comms_channel_tx, comms_channel_rx);
     });
     }
 

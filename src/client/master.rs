@@ -50,20 +50,6 @@ fn order_up(comms_channel_tx: Sender<Communication>, order_list: HashSet<Order>,
     }
 }
 
-// Sends a hall call to the internal order memory
-fn add_hall_call(internal_order_channel_tx:Sender<InternalCommunication>, call_button:CallButton, elevator:Elevator)-> () {
-    let new_order = Order {
-        floor_number: call_button.floor,
-        direction: call_button.call
-    };
-    let new_comm = InternalCommunication {
-        intention: INSERT,
-        order: Some(new_order)
-    };
-    internal_order_channel_tx.send(new_comm).unwrap();
-    elevator.call_button_light(call_button.floor, call_button.call, true);
-}
-
 // Recieves external communcations and processes based on the comm_type
 fn receive_message(internal_order_channel_tx:Sender<InternalCommunication>, message: Communication, mut status_list_w: RwLockWriteGuard<'_, Vec<Status>>) -> () {
     if message.target == u8::MAX {
@@ -120,13 +106,7 @@ fn order_memory(internal_order_channel_rx: Receiver<InternalCommunication>, orde
 }
 
 // Master function. Runs forever (or till it panics)
-pub fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, comms_channel_tx: Sender<Communication>, comms_channel_rx: Receiver<Communication>) -> () {
-
-    let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>(); // Initialize call buttons
-    {
-        let elevator = elevator.clone();
-        spawn(move || elevio::poll::call_buttons(elevator, call_button_tx, poll_period));
-    }
+pub fn run_master(comms_channel_tx: Sender<Communication>, comms_channel_rx: Receiver<Communication>) -> () {
 
     // Setting up status list with Rwlock
     // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
@@ -144,17 +124,6 @@ pub fn run_master(elev_num_floors: u8, elevator: Elevator, poll_period: Duration
         // Crossbeam channel runs the main functions of the master
         // It constantly checks whether it has received a message and runs a standard function if it has waited too long
         cbc::select! {
-            // Get info from call button and add it to the list of floors ordered if it is a hall call
-            recv(call_button_rx) -> a => { 
-                let call_button = a.unwrap();
-                // If call is a hall call, add it
-                if call_button.call == e::HALL_DOWN || call_button.call == e::HALL_UP {
-                    let elevator = elevator.clone();
-                    let internal_order_channel_tx = internal_order_channel_tx.clone();
-                    add_hall_call(internal_order_channel_tx, call_button, elevator); // Adds new hall call to order_list
-                }
-            }
-
             // Get info from comms_channel and process according to status if it is meant for us
             recv(comms_channel_rx) -> a => {
                 let message = a.unwrap();

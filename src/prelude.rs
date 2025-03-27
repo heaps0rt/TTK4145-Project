@@ -30,7 +30,7 @@ pub use cli_table::{format::Justify, print_stdout, Cell, Style, Table};
 pub use clearscreen;
 
 // Structure for a hall order
-#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd)]
+#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd, Serialize, Deserialize)]
 pub struct Order {
     pub floor_number: u8,
     pub direction: u8
@@ -77,7 +77,7 @@ impl Status {
 }
 
 // Structure for cross-module communication. (Eventually replaced by networking)
-#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug,Serialize, Deserialize)]
 pub struct Communication {
     pub sender: u8,
     pub target: u8,
