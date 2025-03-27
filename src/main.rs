@@ -13,13 +13,15 @@ fn main() -> std::io::Result<()>{
     let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?;
     println!("Elevator started:\n{:#?}", elevator);
 
-    // Initialize network unit
-    let network_unit = NetworkUnit::new(1);
-
     // Set up communication channel, this is just a substitute for network communication we will implement later
     let (comms_channel_tx, comms_channel_rx) = cbc::unbounded::<Communication>();
 
-    let (network_channel_tx, network_channel_rx) = cbc::unbounded::<Communication>(); 
+    // Initialize network unit
+    {
+    let comms_channel_tx = comms_channel_tx.clone();
+    let comms_channel_rx = comms_channel_rx.clone();
+    let network_unit = NetworkUnit::new(1,comms_channel_tx,comms_channel_rx);
+    }
 
     // Set poll period for buttons and sensors
     let poll_period = Duration::from_millis(25);
@@ -28,14 +30,13 @@ fn main() -> std::io::Result<()>{
     {
     // Cloning critical variables
     // Note that for all of these, cloning only creates a seperate handle, not a new variable
-    let elevator = elevator.clone();
     let comms_channel_tx = comms_channel_tx.clone();
     let comms_channel_rx = comms_channel_rx.clone();
     // Starting a thread which runs the master and starts the necessary threads
     spawn(move || {
         ttk4145_project::client::master::run_master(comms_channel_tx, comms_channel_rx);
     });
-    } 
+    }
 
     // New scope so cloned values only stay inside it
     {

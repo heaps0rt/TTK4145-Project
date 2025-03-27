@@ -9,19 +9,23 @@ pub const MASTER: u8 = 0;
 pub const MASTER_BACKUP: u8 = 1;
 pub const SLAVE: u8 = 2;
 
-#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd)]
+#[derive(Clone, Debug)]
 pub struct NetworkUnit {
     pub id: u8,
     pub role: u8,
-    pub status: Status
+    pub status: Status,
+    pub network_channel_tx: Sender<Communication>,
+    pub network_channel_rx: Receiver<Communication>
 }
 
 impl NetworkUnit {
-    pub fn new(id:u8) -> Self {
-        NetworkUnit{
+    pub fn new(id:u8,network_channel_tx: Sender<Communication>,network_channel_rx: Receiver<Communication>) -> Self {
+        return NetworkUnit{
             id,
             role: NetworkUnit::determine_role(),
-            status: NetworkUnit::fetch_status()
+            status: NetworkUnit::fetch_status(),
+            network_channel_tx,
+            network_channel_rx
         }
     }
     pub fn determine_role() -> u8 {return MASTER;}
