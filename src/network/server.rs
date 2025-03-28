@@ -6,16 +6,12 @@ const BROADCAST_ADDR: &str = "255.255.255.255:20010";
 const LISTEN_ADDR: &str = "0.0.0.0:20010";
 pub const ID: u8 = 10;
 
-pub const MASTER: u8 = 0;
-pub const MASTER_BACKUP: u8 = 1;
-pub const SLAVE: u8 = 2;
-
 #[derive(Clone, Debug)]
 pub struct NetworkUnit {
     pub id: u8,
     pub role: u8,
     pub my_master: Option<u8>,
-    pub status_list: HashSet<Status>
+    pub state_list: Arc<Mutex<HashSet<State>>>
 }
 
 impl NetworkUnit {
@@ -25,8 +21,15 @@ impl NetworkUnit {
             id,
             role,
             my_master,
-            status_list: HashSet::<Status>::new()
+            state_list: Arc::new(Mutex::new(HashSet::new()))
         }
+    }
+    pub fn update_state_list(&self, new_state: State) {
+        let mut state_list = self.state_list.lock().unwrap();
+        state_list.replace(new_state); // Replaces if id exists, otherwise inserts
+    }
+    pub fn get_state_list(&self) -> HashSet<State> {
+        self.state_list.lock().unwrap().clone()
     }
     pub fn determine_role(id:u8) -> (u8,Option<u8>) {
         return (MASTER, None);
@@ -55,7 +58,7 @@ impl NetworkUnit {
 }
 
 pub fn network_periodic_sender(network_unit: NetworkUnit, network_channel_rx: Receiver<Communication>) {
-    let mut message: Option<Communication> = None;
+    let message: Option<Communication> = None;
 
     loop {
         if let Ok(socket) = UdpSocket::bind("0.0.0.0:0").and_then(|s| { s.set_broadcast(true).map(|_| s) }) {
@@ -64,7 +67,10 @@ pub fn network_periodic_sender(network_unit: NetworkUnit, network_channel_rx: Re
             while !restart {
                 cbc::select! {
                     recv(network_channel_rx) -> msg => {
-                        message = msg.ok();
+                        if let Some(mut message) = msg.ok() {
+                            message.sender = network_unit.id;
+                            message.sender_role = network_unit.role;
+                        }
                     },
                     default(Duration::from_millis(100)) => {}
                 }
@@ -83,7 +89,7 @@ pub fn network_periodic_sender(network_unit: NetworkUnit, network_channel_rx: Re
     }
 }
 
-pub fn network_receiver(network_unit: NetworkUnit, network_channel_tx: Sender<Communication>) {
+pub fn network_receiver(network_unit: NetworkUnit, master_channel_tx:Sender<Communication>,elevator_channel_tx:Sender<Communication>) {
     loop {
         // Create new socket each iteration to recover from errors
         let socket = match UdpSocket::bind(LISTEN_ADDR) {
@@ -110,7 +116,10 @@ pub fn network_receiver(network_unit: NetworkUnit, network_channel_tx: Sender<Co
                     if let Ok(received) = str::from_utf8(&buf[..size]) {
                         if let Ok(msg) = serde_json::from_str::<Communication>(received) {
                             if msg.target == network_unit.id || msg.target == TARGET_ALL {
-                                let _ = network_channel_tx.send(msg);
+                                let network_unit = network_unit.clone();
+                                let master_channel_tx = master_channel_tx.clone();
+                                let elevator_channel_tx = elevator_channel_tx.clone();
+                                network_message_handler(network_unit,msg,master_channel_tx,elevator_channel_tx)
                             }
                         }
                     }
@@ -125,5 +134,36 @@ pub fn network_receiver(network_unit: NetworkUnit, network_channel_tx: Sender<Co
                 }
             }
         }
+    }
+}
+
+// Recieves external network communcations and processes based on the comm_type
+fn network_message_handler(network_unit: NetworkUnit,message:Communication,master_channel_tx:Sender<Communication>,elevator_channel_tx:Sender<Communication>) {
+    match message.target {
+        MASTER => {
+            if network_unit.role == MASTER {
+                let _ = master_channel_tx.send(message);
+            }
+        }
+        ID | TARGET_ALL => {
+            match message.comm_type {
+                STATUS_MESSAGE => {
+                    if let Some(status) = message.status {
+                        let new_state = State {
+                            id: message.sender,
+                            role: message.sender_role,
+                            status,
+                        };
+                        network_unit.update_state_list(new_state);
+                    }
+                }
+                ORDER_TRANSFER => {
+                    let _ = elevator_channel_tx.send(message);
+                }
+                _ => {}
+            }
+            let _ = elevator_channel_tx.send(message);
+        }
+        _ => {}
     }
 }

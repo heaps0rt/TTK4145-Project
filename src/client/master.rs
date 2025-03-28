@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use crate::network::server::*;
 
 // Finds the relative distance to an order based on the current target floor.
 fn cost_of_order(order: Order, status: Status) -> u8 {
@@ -29,34 +30,52 @@ fn cost_of_order(order: Order, status: Status) -> u8 {
 }
 
 // Sends orders to the elevator
-fn order_up(comms_channel_tx: Sender<Communication>, order_list: HashSet<Order>, status_list: Vec<Status>) -> () {
+fn order_up(
+    comms_channel_tx: Sender<Communication>,
+    order_list: HashSet<Order>,
+    state_list: HashSet<State>,
+) -> () {
+    let status_list: Vec<Status> = state_list.iter().map(|state| state.status).collect();
+
     let mut cost_of_orders = Vec::new();
-    let status_list_copy = status_list.clone();
-    for element in &order_list {
-        for status in &status_list_copy {
-            cost_of_orders.insert(cost_of_orders.len(), cost_of_order(*element, *status));
+    for order in &order_list {
+        // Calculate costs for this order against all statuses
+        cost_of_orders.clear();
+        for status in &status_list {
+            cost_of_orders.push(cost_of_order(*order, *status));
         }
-        let max = cost_of_orders.iter().max().unwrap();
-        let max_index = cost_of_orders.iter().enumerate().filter(|&(_, &cost)| cost == *max).map(|(i, _)| i).next().unwrap();
+
+        // Find the unit with minimum cost
+        let min_cost = cost_of_orders.iter().min().unwrap();
+        let (best_unit_index, _) = cost_of_orders.iter()
+            .enumerate()
+            .find(|(_, &cost)| cost == *min_cost)
+            .unwrap();
+
+        // Get the corresponding State to find the unit ID
+        let best_unit_state = state_list.iter()
+            .nth(best_unit_index)
+            .unwrap();
+
         let new_message = Communication {
-            sender: 0,
-            target: max_index as u8,
+            sender: u8::MAX,  // System-generated message
+            sender_role: u8::MAX,
+            target: best_unit_state.id,  // Target the unit by its ID
             comm_type: ORDER_TRANSFER,
             status: None,
-            order: Some(*element)
+            order: Some(*order)
         };
-        println!("Sending order: {:#?}", new_message);
+
+        println!("Sending order to unit {}: {:?}", best_unit_state.id, new_message.order);
         comms_channel_tx.send(new_message).unwrap();
     }
 }
 
 // Recieves external communcations and processes based on the comm_type
-fn receive_message(internal_order_channel_tx:Sender<InternalCommunication>, message: Communication, mut status_list_w: RwLockWriteGuard<'_, Vec<Status>>) -> () {
+fn receive_message(internal_order_channel_tx:Sender<InternalCommunication>, message: Communication) -> () {
     if message.target == u8::MAX {
         match message.comm_type {
-            STATUS_MESSAGE => { // writes status message to the status_list
-                // println!("Received status: {:#?}", message.status);
-                status_list_w[message.sender as usize] = message.status.unwrap();
+            STATUS_MESSAGE => { // handled on the network unit
             }
             ORDER_TRANSFER => {
                 // Message is not for me
@@ -106,12 +125,9 @@ fn order_memory(internal_order_channel_rx: Receiver<InternalCommunication>, orde
 }
 
 // Master function. Runs forever (or till it panics)
-pub fn run_master(comms_channel_tx: Sender<Communication>, comms_channel_rx: Receiver<Communication>) -> () {
+pub fn run_master(network_unit:NetworkUnit,comms_channel_tx: Sender<Communication>, comms_channel_rx: Receiver<Communication>) -> () {
 
-    // Setting up status list with Rwlock
-    // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
-    let status_list: RwLock<Vec<Status>> = RwLock::from(Vec::from([Status::new()]));
-
+    // setting up internal memory channel
     let (internal_order_channel_tx, internal_order_channel_rx) = cbc::bounded(1);
     let (order_list_tx, order_list_rx) = cbc::bounded(1);
 
@@ -128,17 +144,16 @@ pub fn run_master(comms_channel_tx: Sender<Communication>, comms_channel_rx: Rec
             recv(comms_channel_rx) -> a => {
                 let message = a.unwrap();
                 // println!("Received message: {:#?}", message.comm_type);
-                let status_list_w = status_list.write().unwrap();
                 let internal_order_channel_tx = internal_order_channel_tx.clone();
-                receive_message(internal_order_channel_tx, message, status_list_w);
+                receive_message(internal_order_channel_tx, message);
             }
             // This function polls continuously if no other functions have been called
             default(Duration::from_millis(500)) => {
                 // Opening status list for reading
-                let status_list_r = status_list.read().unwrap();
+                let state_list = network_unit.get_state_list();
 
                 // If status has been received, ie. elevator is alive, try to send orders
-                if status_list_r[0 as usize].direction != u8::MAX {
+                if !state_list.is_empty() {
                     // Requesting order list from order memory
                     let request = InternalCommunication {
                         intention: REQUEST_ORDER,
@@ -147,11 +162,12 @@ pub fn run_master(comms_channel_tx: Sender<Communication>, comms_channel_rx: Rec
                     internal_order_channel_tx.send(request).unwrap();
                     let order_list = order_list_rx.recv().unwrap();
                     
-                    let status_list_r_copy = status_list_r.clone();
-                    let comms_channel_tx = comms_channel_tx.clone();
                     // Calling ordering function
-                    if order_list.is_empty().not() {println!("Ordering up with order_list{:#?}", order_list);}
-                    order_up(comms_channel_tx, order_list, status_list_r_copy);
+                    if !order_list.is_empty() {
+                        println!("Ordering up with order_list{:#?}", order_list);
+                        let comms_channel_tx = comms_channel_tx.clone();
+                        order_up(comms_channel_tx, order_list, state_list);
+                    }
                 }
                 // println!("{:#?}", status_list);
             }

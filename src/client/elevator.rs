@@ -1,6 +1,5 @@
 use crate::prelude::*;
 use crate::client::utils::*;
-use crate::network::server::MASTER;
 
 // When a new foor is passed checks whether we should stop and open the door, then checks whether we should continue
 fn floor_recieved(
@@ -153,13 +152,14 @@ fn handle_cab_order (call_button: CallButton, last_floor: u8, elevator: Elevator
 }
 
 // Sends a hall call to the master
-fn handle_hall_call(id:u8,comms_channel_tx:Sender<Communication>, call_button:CallButton, elevator:Elevator)-> () {
+fn handle_hall_call(comms_channel_tx:Sender<Communication>, call_button:CallButton, elevator:Elevator)-> () {
     let new_order = Order {
         floor_number: call_button.floor,
         direction: call_button.call
     };
     let new_comm = Communication {
-        sender: id,
+        sender: u8::MAX,
+        sender_role: u8::MAX,
         target: MASTER,
         comm_type: ORDER_TRANSFER,
         status: None,
@@ -299,11 +299,10 @@ fn send_elevator_startup(last_floor:u8,direction: u8,destination_list_copy: Hash
 }
 
 // Create and send status to master
-fn send_status_update(id: u8,last_floor:u8,direction: u8,destination_list: HashSet<Order>,comms_channel_tx:Sender<Communication>)->() {
+fn send_status_update(last_floor:u8,direction: u8,destination_list: HashSet<Order>,comms_channel_tx:Sender<Communication>)->() {
     // println!("{:#?}", destination_list_r);
     
     let current_status = Status {
-        id:id,
         last_floor: last_floor,
         direction: direction,
         errors: false,
@@ -312,8 +311,9 @@ fn send_status_update(id: u8,last_floor:u8,direction: u8,destination_list: HashS
     };
     
     let new_message = Communication {
-        sender: 0,
-        target: u8::MAX,
+        sender: u8::MAX,
+        sender_role: u8::MAX,
+        target: TARGET_ALL,
         comm_type: STATUS_MESSAGE,
         status: Some(current_status),
         order: None
@@ -432,7 +432,7 @@ pub fn run_elevator(id:u8,elev_num_floors: u8, elevator: Elevator, poll_period: 
                 } else {
                     let elevator = elevator.clone();
                     let comms_channel_tx = comms_channel_tx.clone();
-                    handle_hall_call(id,comms_channel_tx, call_button, elevator); // Sends new hall call to master
+                    handle_hall_call(comms_channel_tx, call_button, elevator); // Sends new hall call to master
                 }
             }
             // Get floor status and save last floor for later use
@@ -484,7 +484,7 @@ pub fn run_elevator(id:u8,elev_num_floors: u8, elevator: Elevator, poll_period: 
                 {
                 let destination_list_copy = destination_list.clone();
                 let comms_channel_tx = comms_channel_tx.clone();
-                send_status_update(id,last_floor,direction,destination_list_copy,comms_channel_tx);
+                send_status_update(last_floor,direction,destination_list_copy,comms_channel_tx);
                 }
                 {
                 let destination_list_copy = destination_list.clone();

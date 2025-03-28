@@ -59,7 +59,6 @@ pub fn print_order(order: &Order) -> () {
 // Structure for the status of an elevator
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd, Serialize, Deserialize)]
 pub struct Status {
-    pub id:u8,
     pub last_floor: u8,
     pub direction: u8,
     pub errors: bool, // Yes or no, any errors
@@ -70,7 +69,6 @@ pub struct Status {
 impl Status {
     pub fn new() -> Self {
         Status{
-            id:3,
             last_floor: u8::MAX,
             direction: u8::MAX,
             errors: false,
@@ -84,6 +82,7 @@ impl Status {
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug,Serialize, Deserialize)]
 pub struct Communication {
     pub sender: u8,
+    pub sender_role: u8,
     pub target: u8,
     pub comm_type: u8,
     pub status: Option<Status>,
@@ -112,3 +111,16 @@ pub const REQUEST_DIRECTION: u8 = 7;
 pub const UPDATE_DIRECTION: u8 = 8;
 
 pub const DIRN_STOP_TEMP: u8 = 3;
+
+// Const variables for networking
+pub const MASTER: u8 = 0;
+pub const MASTER_BACKUP: u8 = 1;
+pub const SLAVE: u8 = 2;
+
+// Structure for the state of a network unit
+#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd, Serialize, Deserialize)]
+pub struct State {
+    pub id: u8,
+    pub role: u8,
+    pub status: Status,
+}

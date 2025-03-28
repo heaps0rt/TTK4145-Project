@@ -15,8 +15,8 @@ fn main() -> std::io::Result<()>{
 
     // Set up communication channel, this is just a substitute for network communication we will implement later
     let (network_send_channel_tx, network_send_channel_rx) = cbc::unbounded::<Communication>();
-    let (network_recieve_channel_tx, network_recieve_channel_rx) = cbc::unbounded::<Communication>();
     let (master_channel_tx, master_channel_rx) = cbc::unbounded::<Communication>();
+    let (elevator_channel_tx, elevator_channel_rx) = cbc::unbounded::<Communication>();
 
     // Initialize network unit
     let network_unit = NetworkUnit::new(ID);
@@ -29,8 +29,9 @@ fn main() -> std::io::Result<()>{
 
     {
     let network_unit:NetworkUnit = network_unit.clone();
-    let network_recieve_channel_tx: Sender<Communication> = network_recieve_channel_tx.clone();
-    spawn(move || {network_receiver(network_unit, network_recieve_channel_tx);});
+    let master_channel_tx: Sender<Communication> = master_channel_tx.clone();
+    let elevator_channel_tx: Sender<Communication> = elevator_channel_tx.clone();
+    spawn(move || {network_receiver(network_unit, master_channel_tx,elevator_channel_tx);});
     }
 
     // Set poll period for buttons and sensors
@@ -40,11 +41,12 @@ fn main() -> std::io::Result<()>{
     {
     // Cloning critical variables
     // Note that for all of these, cloning only creates a seperate handle, not a new variable
+    let network_unit=network_unit.clone();
     let network_channel_tx = network_send_channel_tx.clone();
     let master_channel_rx = master_channel_rx.clone();
     // Starting a thread which runs the master and starts the necessary threads
     spawn(move || {
-        ttk4145_project::client::master::run_master(network_channel_tx, master_channel_rx);
+        ttk4145_project::client::master::run_master(network_unit,network_channel_tx, master_channel_rx);
     });
     }
 
@@ -53,6 +55,7 @@ fn main() -> std::io::Result<()>{
     // Cloning critical variables
     // Note that for all of these, cloning only creates a seperate handle, not a new variable
     let elevator = elevator.clone();
+    let network_unit=network_unit.clone();
     let network_channel_tx = network_send_channel_tx.clone();
     let comms_channel_rx = network_send_channel_rx.clone();
     
