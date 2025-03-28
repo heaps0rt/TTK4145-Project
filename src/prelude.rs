@@ -57,6 +57,7 @@ pub fn print_order(order: &Order) -> () {
 // Structure for the status of an elevator
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, PartialOrd, Serialize, Deserialize)]
 pub struct Status {
+    pub id:u8,
     pub last_floor: u8,
     pub direction: u8,
     pub errors: bool, // Yes or no, any errors
@@ -67,6 +68,7 @@ pub struct Status {
 impl Status {
     pub fn new() -> Self {
         Status{
+            id:0,
             last_floor: u8::MAX,
             direction: u8::MAX,
             errors: false,
@@ -90,6 +92,7 @@ pub struct Communication {
 pub const STATUS_MESSAGE: u8 = 0;
 pub const ORDER_TRANSFER: u8 = 1;
 pub const ORDER_ACK: u8 = 2;
+pub const TARGET_ALL: u8 = u8::MAX;
 
 // Structure for internal communications through message passing
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]

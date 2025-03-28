@@ -110,7 +110,7 @@ pub fn run_master(comms_channel_tx: Sender<Communication>, comms_channel_rx: Rec
 
     // Setting up status list with Rwlock
     // Rwlock means that it can either be written to by a single thread or read by any number of threads at once
-    let mut status_list = RwLock::from(Vec::from([Status::new()]));
+    let status_list: RwLock<Vec<Status>> = RwLock::from(Vec::from([Status::new()]));
 
     let (internal_order_channel_tx, internal_order_channel_rx) = cbc::bounded(1);
     let (order_list_tx, order_list_rx) = cbc::bounded(1);

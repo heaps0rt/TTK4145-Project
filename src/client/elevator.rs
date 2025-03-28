@@ -68,7 +68,7 @@ fn check_for_bottom(dirn: u8, floor: u8, elev_num_floors: u8, elevator_controlle
 }
 
 // Returns the next heading
-fn check_continue_or_not(dirn: u8, floor: u8, target_floor: u8) -> (u8) {
+fn check_continue_or_not(dirn: u8, floor: u8, target_floor: u8) -> u8 {
     // print!("\nCHECK_CONTINUE\n");
     // print!("dirn  {:#?}\n",dirn);
     // print!("floor  {:#?}\n",floor);
@@ -88,7 +88,7 @@ fn check_for_stop(
     target_floor: u8,
     internal_order_channel_tx: Sender<InternalCommunication>,
     elevator_controller_tx: Sender<u8>
-) -> (bool) {
+) -> bool {
     for destination in destination_list {
         if destination.floor_number == floor {
             if (halldirn_to_elevdirn(destination.direction) == dirn) || (floor == target_floor) {
@@ -117,7 +117,7 @@ fn check_lights(elevator: &Elevator, dirn: u8, floor: u8, num_floors: u8) -> () 
     else if (dirn == e::DIRN_UP) || (floor == 0) {
         elevator.call_button_light(floor, e::HALL_UP, false);
     }
-    else if (dirn == e::DIRN_STOP) {
+    else if dirn == e::DIRN_STOP {
         elevator.call_button_light(floor, e::HALL_DOWN, false);
         elevator.call_button_light(floor, e::HALL_UP, false);
     }
@@ -295,10 +295,11 @@ fn send_elevator_startup(last_floor:u8,direction: u8,destination_list_copy: Hash
 }
 
 // Create and send status to master
-fn send_status_update(last_floor:u8,direction: u8,destination_list: HashSet<Order>,comms_channel_tx:Sender<Communication>)->() {
+fn send_status_update(id: u8,last_floor:u8,direction: u8,destination_list: HashSet<Order>,comms_channel_tx:Sender<Communication>)->() {
     // println!("{:#?}", destination_list_r);
     
     let current_status = Status {
+        id:id,
         last_floor: last_floor,
         direction: direction,
         errors: false,
@@ -352,7 +353,7 @@ fn readout_status(last_floor:u8,direction: u8,destination_list: HashSet<Order>,l
 }
 
 // Elevator function. Runs forever (or till it panics)
-pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Duration, comms_channel_tx: Sender<Communication>, comms_channel_rx: Receiver<Communication>) -> () {
+pub fn run_elevator(id:u8,elev_num_floors: u8, elevator: Elevator, poll_period: Duration, comms_channel_tx: Sender<Communication>, comms_channel_rx: Receiver<Communication>) -> () {
 
     // Initialize call buttons
     let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
@@ -367,13 +368,13 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
         spawn(move || elevio::poll::floor_sensor(elevator, floor_sensor_tx, poll_period));
     }
     // Initialize stop button
-    let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>(); 
+    let (stop_button_tx, _stop_button_rx) = cbc::unbounded::<bool>(); 
     {
         let elevator = elevator.clone();
         spawn(move || elevio::poll::stop_button(elevator, stop_button_tx, poll_period));
     }
     // Initialize obstruction switch
-    let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>(); 
+    let (obstruction_tx, _obstruction_rx) = cbc::unbounded::<bool>(); 
     {
         let elevator = elevator.clone();
         spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, poll_period));
@@ -387,8 +388,6 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
     
     // Set up variable to remember what floor we were last at
     let mut last_floor: u8 = elev_num_floors+1;
-    
-    let mut target_floor: u8 = 0;
 
     // Setting up last_last variables for the purposes of readout function
     let mut last_destination_list: HashSet<Order> = HashSet::new();
@@ -449,7 +448,7 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
             // Get info from comms_channel and process according to status if it is meant for us
             recv(comms_channel_rx) -> a => {
                 let message = a.unwrap();
-                if message.target == 0 {
+                if message.target == id {
                     println!("Comms Recieved {:#?}", message);
                     let internal_order_channel_tx = internal_order_channel_tx.clone();
                     let comms_channel_tx = comms_channel_tx.clone();
@@ -481,7 +480,7 @@ pub fn run_elevator(elev_num_floors: u8, elevator: Elevator, poll_period: Durati
                 {
                 let destination_list_copy = destination_list.clone();
                 let comms_channel_tx = comms_channel_tx.clone();
-                send_status_update(last_floor,direction,destination_list_copy,comms_channel_tx);
+                send_status_update(id,last_floor,direction,destination_list_copy,comms_channel_tx);
                 }
                 {
                 let destination_list_copy = destination_list.clone();

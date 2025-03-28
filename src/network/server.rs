@@ -4,6 +4,7 @@ use std::str;
 
 const BROADCAST_ADDR: &str = "255.255.255.255:20010";
 const LISTEN_ADDR: &str = "0.0.0.0:20010";
+pub const ID: u8 = 0;
 
 pub const MASTER: u8 = 0;
 pub const MASTER_BACKUP: u8 = 1;
@@ -13,24 +14,21 @@ pub const SLAVE: u8 = 2;
 pub struct NetworkUnit {
     pub id: u8,
     pub role: u8,
-    pub status: Status,
-    pub network_channel_tx: Sender<Communication>,
-    pub network_channel_rx: Receiver<Communication>
+    pub status: Status
 }
 
 impl NetworkUnit {
-    pub fn new(id:u8,network_channel_tx: Sender<Communication>,network_channel_rx: Receiver<Communication>) -> Self {
+    pub fn new(id:u8) -> Self {
         return NetworkUnit{
             id,
             role: NetworkUnit::determine_role(),
-            status: NetworkUnit::fetch_status(),
-            network_channel_tx,
-            network_channel_rx
+            status: NetworkUnit::fetch_status()
         }
     }
     pub fn determine_role() -> u8 {return MASTER;}
     pub fn fetch_status() -> Status {
         return Status {
+            id: 0,
             last_floor: 0,
             direction: 0,
             errors: false,
@@ -46,7 +44,7 @@ impl NetworkUnit {
         socket.send_to(message.as_bytes(), BROADCAST_ADDR).expect("Failed to send broadcast");
     }
 
-    pub fn receive_broadcasts(&self) -> Option<Communication> {
+    pub fn receive_broadcast(&self) -> Option<Communication> {
         let socket = UdpSocket::bind(LISTEN_ADDR).expect("Failed to bind socket");
         socket.set_read_timeout(Some(Duration::from_secs(5))).expect("Failed to set timeout");
         
