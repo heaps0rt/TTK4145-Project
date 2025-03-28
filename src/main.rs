@@ -19,7 +19,7 @@ fn main() -> std::io::Result<()>{
     let (elevator_channel_tx, elevator_channel_rx) = cbc::unbounded::<Communication>();
 
     // Initialize network unit
-    let network_unit = NetworkUnit::new(ID);
+    let mut network_unit = NetworkUnit::new(ID);
 
     {
     let network_unit:NetworkUnit = network_unit.clone();
@@ -34,11 +34,19 @@ fn main() -> std::io::Result<()>{
     spawn(move || {network_receiver(network_unit, master_channel_tx,elevator_channel_tx);});
     }
 
+    // Listen for statuses a bit before determining starting role
+    {
+        sleep(Duration::from_millis(3000));
+        let (role, my_master) = network_unit.determine_role();
+        network_unit.role = role;
+        network_unit.my_master = my_master;
+    }
+
     // Set poll period for buttons and sensors
     let poll_period = Duration::from_millis(25);
 
     // New scope so cloned values only stay inside it
-    {
+    if network_unit.role == MASTER {
     // Cloning critical variables
     // Note that for all of these, cloning only creates a seperate handle, not a new variable
     let network_unit=network_unit.clone();

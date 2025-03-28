@@ -16,12 +16,11 @@ pub struct NetworkUnit {
 
 impl NetworkUnit {
     pub fn new(id:u8) -> Self {
-        let (role,my_master) = NetworkUnit::determine_role(id);
-        return NetworkUnit{
+        NetworkUnit {
             id,
-            role,
-            my_master,
-            state_list: Arc::new(Mutex::new(HashSet::new()))
+            role: SLAVE,
+            my_master: None,
+            state_list: Arc::new(Mutex::new(HashSet::new())),
         }
     }
     pub fn update_state_list(&self, new_state: State) {
@@ -31,8 +30,27 @@ impl NetworkUnit {
     pub fn get_state_list(&self) -> HashSet<State> {
         self.state_list.lock().unwrap().clone()
     }
-    pub fn determine_role(id:u8) -> (u8,Option<u8>) {
-        return (MASTER, None);
+    pub fn determine_role(&self) -> (u8, Option<u8>) {
+        let state_list = self.state_list.lock().unwrap();
+        let has_master = state_list.iter().any(|s| s.role == MASTER);
+        let has_master_backup = state_list.iter().any(|s| s.role == MASTER_BACKUP);
+    
+        if !has_master {
+            // No master found, become master
+            (MASTER, Some(self.id))
+        } else if has_master && !has_master_backup {
+            // Master exists but no backup, become master_backup
+            let master_id = state_list.iter()
+                .find(|s| s.role == MASTER)
+                .map(|s| s.id);
+            (MASTER_BACKUP, master_id)
+        } else {
+            // Both master and backup exist, become slave
+            let master_id = state_list.iter()
+                .find(|s| s.role == MASTER)
+                .map(|s| s.id);
+            (SLAVE, master_id)
+        }
     }
     pub fn send_broadcast(&self,broadcast:Communication) {
         let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket");
