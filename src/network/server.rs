@@ -4,7 +4,7 @@ use std::str;
 
 const BROADCAST_ADDR: &str = "255.255.255.255:20010";
 const LISTEN_ADDR: &str = "0.0.0.0:20010";
-pub const ID: u8 = 0;
+pub const ID: u8 = 10;
 
 pub const MASTER: u8 = 0;
 pub const MASTER_BACKUP: u8 = 1;

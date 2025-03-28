@@ -1,5 +1,6 @@
 use crate::prelude::*;
 use crate::client::utils::*;
+use crate::network::server::MASTER;
 
 // When a new foor is passed checks whether we should stop and open the door, then checks whether we should continue
 fn floor_recieved(
@@ -152,16 +153,19 @@ fn handle_cab_order (call_button: CallButton, last_floor: u8, elevator: Elevator
 }
 
 // Sends a hall call to the internal order memory
-fn handle_hall_call(internal_order_channel_tx:Sender<InternalCommunication>, call_button:CallButton, elevator:Elevator)-> () {
+fn handle_hall_call(id:u8,comms_channel_tx:Sender<Communication>, call_button:CallButton, elevator:Elevator)-> () {
     let new_order = Order {
         floor_number: call_button.floor,
         direction: call_button.call
     };
-    let new_comm = InternalCommunication {
-        intention: INSERT,
+    let new_comm = Communication {
+        sender: id,
+        target: MASTER,
+        comm_type: ORDER_TRANSFER,
+        status: None,
         order: Some(new_order)
     };
-    internal_order_channel_tx.send(new_comm).unwrap();
+    comms_channel_tx.send(new_comm).unwrap();
     elevator.call_button_light(call_button.floor, call_button.call, true);
 }
 
@@ -427,8 +431,8 @@ pub fn run_elevator(id:u8,elev_num_floors: u8, elevator: Elevator, poll_period: 
                     spawn(move||handle_cab_order(call_button, last_floor, elevator, internal_order_channel_tx));
                 } else {
                     let elevator = elevator.clone();
-                    let internal_order_channel_tx = internal_order_channel_tx.clone();
-                    handle_hall_call(internal_order_channel_tx, call_button, elevator); // Adds new hall call to order_list
+                    let comms_channel_tx = comms_channel_tx.clone();
+                    handle_hall_call(id,comms_channel_tx, call_button, elevator); // Sends new hall call to master
                 }
             }
             // Get floor status and save last floor for later use
