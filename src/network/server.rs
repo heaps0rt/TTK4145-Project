@@ -25,7 +25,11 @@ impl NetworkUnit {
     }
     pub fn update_state_list(&self, new_state: State) {
         let mut state_list = self.state_list.lock().unwrap();
-        state_list.replace(new_state); // Replaces if id exists, otherwise inserts
+        // Remove existing state with the same id
+        if let Some(existing) = state_list.iter().find(|s| s.id == new_state.id).cloned() {
+            state_list.remove(&existing);
+        }
+        state_list.insert(new_state);
     }
     pub fn get_state_list(&self) -> HashSet<State> {
         self.state_list.lock().unwrap().clone()
@@ -147,7 +151,7 @@ pub fn network_receiver(network_unit: NetworkUnit, master_channel_tx:Sender<Comm
                     continue;
                 }
                 Err(e) => {
-                    eprintln!("Receive error: {}, restarting...", e);
+                    // eprintln!("Receive error: {}, restarting...", e);
                     break;
                 }
             }
@@ -180,7 +184,6 @@ fn network_message_handler(network_unit: NetworkUnit,message:Communication,maste
                 }
                 _ => {}
             }
-            let _ = elevator_channel_tx.send(message);
         }
         _ => {}
     }

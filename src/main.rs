@@ -40,6 +40,7 @@ fn main() -> std::io::Result<()>{
         let (role, my_master) = network_unit.determine_role();
         network_unit.role = role;
         network_unit.my_master = my_master;
+        println!("Set role as {}:",role)
     }
 
     // Set poll period for buttons and sensors
@@ -65,11 +66,11 @@ fn main() -> std::io::Result<()>{
     let elevator = elevator.clone();
     let network_unit=network_unit.clone();
     let network_channel_tx = network_send_channel_tx.clone();
-    let comms_channel_rx = network_send_channel_rx.clone();
+    let elevator_channel_rx = elevator_channel_rx.clone();
     
     // Starting a thread which runs the elevator and starts the necessary threads
     spawn(move || {
-        ttk4145_project::client::elevator::run_elevator(network_unit.id,elev_num_floors, elevator, poll_period, network_channel_tx, comms_channel_rx);
+        ttk4145_project::client::elevator::run_elevator(network_unit.id,elev_num_floors, elevator, poll_period, network_channel_tx, elevator_channel_rx);
     });
     }
 

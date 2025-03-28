@@ -265,7 +265,6 @@ fn handle_message_from_master(message: Communication, internal_order_channel_tx:
 
             let mut new_message = message;
             new_message.target = new_message.sender;
-            new_message.sender = 0;
             new_message.comm_type = ORDER_ACK;
             comms_channel_tx.send(new_message).unwrap();
             sleep(Duration::from_millis(10));
