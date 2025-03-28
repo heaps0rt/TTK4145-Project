@@ -39,7 +39,7 @@ fn order_up(comms_channel_tx: Sender<Communication>, order_list: HashSet<Order>,
         let max = cost_of_orders.iter().max().unwrap();
         let max_index = cost_of_orders.iter().enumerate().filter(|&(_, &cost)| cost == *max).map(|(i, _)| i).next().unwrap();
         let new_message = Communication {
-            sender: u8::MAX,
+            sender: 0,
             target: max_index as u8,
             comm_type: ORDER_TRANSFER,
             status: None,

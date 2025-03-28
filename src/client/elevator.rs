@@ -152,7 +152,7 @@ fn handle_cab_order (call_button: CallButton, last_floor: u8, elevator: Elevator
     }  
 }
 
-// Sends a hall call to the internal order memory
+// Sends a hall call to the master
 fn handle_hall_call(id:u8,comms_channel_tx:Sender<Communication>, call_button:CallButton, elevator:Elevator)-> () {
     let new_order = Order {
         floor_number: call_button.floor,

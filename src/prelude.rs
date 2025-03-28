@@ -7,7 +7,9 @@ pub use std::u8;
 pub use std::sync::*;
 pub use std::cmp::max;
 pub use std::ops::Not;
+
 pub use serde::{Serialize,Deserialize};
+pub use anyhow::anyhow;
 
 pub use crossbeam_channel::Receiver;
 pub use crossbeam_channel::Sender;
@@ -68,7 +70,7 @@ pub struct Status {
 impl Status {
     pub fn new() -> Self {
         Status{
-            id:0,
+            id:3,
             last_floor: u8::MAX,
             direction: u8::MAX,
             errors: false,
