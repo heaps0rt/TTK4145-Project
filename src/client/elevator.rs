@@ -249,7 +249,7 @@ fn handle_elevator_controller(elevator_controller_rx: Receiver<u8>, elevator: El
 
 // Handles external communications from master; recieves new orders from master
 fn handle_message_from_master(message: Communication, internal_order_channel_tx: Sender<InternalCommunication>, comms_channel_tx: Sender<Communication>) -> () {
-    println!("Recieved {:#?}", message);
+    // println!("Recieved {:#?}", message);
     match message.comm_type {
         STATUS_MESSAGE => {
             // Message is not for me
@@ -260,11 +260,12 @@ fn handle_message_from_master(message: Communication, internal_order_channel_tx:
                 intention: INSERT,
                 order: Some(new_order)
             };
+            println!("ELEVATOR adding order {:#?}", message);
             let internal_order_channel_tx = internal_order_channel_tx.clone();
             internal_order_channel_tx.send(new_comm).unwrap();
 
             let mut new_message = message;
-            new_message.target = new_message.sender;
+            new_message.target = MASTER;
             new_message.comm_type = ORDER_ACK;
             comms_channel_tx.send(new_message).unwrap();
             sleep(Duration::from_millis(10));
@@ -407,8 +408,6 @@ pub fn run_elevator(id:u8,elev_num_floors: u8, elevator: Elevator, poll_period: 
     spawn(move || elevator_memory(internal_order_channel_rx, destination_list_tx, elevator_readout_tx));
     }
 
-    
-
     {
     let elevator = elevator.clone();
     let elevator_controller_rx = elevator_controller_rx.clone();
@@ -452,7 +451,7 @@ pub fn run_elevator(id:u8,elev_num_floors: u8, elevator: Elevator, poll_period: 
             recv(comms_channel_rx) -> a => {
                 let message = a.unwrap();
                 if message.target == id {
-                    println!("Comms Recieved {:#?}", message);
+                    println!("Elevator Recieved {:#?}", message);
                     let internal_order_channel_tx = internal_order_channel_tx.clone();
                     let comms_channel_tx = comms_channel_tx.clone();
                     spawn (move || handle_message_from_master(message, internal_order_channel_tx, comms_channel_tx));

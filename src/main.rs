@@ -21,12 +21,7 @@ fn main() -> std::io::Result<()>{
     // Initialize network unit
     let mut network_unit = NetworkUnit::new(ID);
 
-    {
-    let network_unit:NetworkUnit = network_unit.clone();
-    let network_send_channel_rx: Receiver<Communication> = network_send_channel_rx.clone();
-    spawn(move || {network_periodic_sender(network_unit,network_send_channel_rx);});
-    }
-
+    // Initialize network reciever
     {
     let network_unit:NetworkUnit = network_unit.clone();
     let master_channel_tx: Sender<Communication> = master_channel_tx.clone();
@@ -43,6 +38,13 @@ fn main() -> std::io::Result<()>{
         println!("Set role as {}:",role)
     }
 
+    // Initialize network sender
+    {
+        let network_unit:NetworkUnit = network_unit.clone();
+        let network_send_channel_rx: Receiver<Communication> = network_send_channel_rx.clone();
+        spawn(move || {network_periodic_sender(network_unit,network_send_channel_rx);});
+        }
+
     // Set poll period for buttons and sensors
     let poll_period = Duration::from_millis(25);
 
@@ -57,6 +59,7 @@ fn main() -> std::io::Result<()>{
     spawn(move || {
         ttk4145_project::client::master::run_master(network_unit,network_channel_tx, master_channel_rx);
     });
+    println!("Master initiated.")
     }
 
     // New scope so cloned values only stay inside it

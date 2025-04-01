@@ -18,7 +18,7 @@ impl NetworkUnit {
     pub fn new(id:u8) -> Self {
         NetworkUnit {
             id,
-            role: SLAVE,
+            role: MASTER,
             my_master: None,
             state_list: Arc::new(Mutex::new(HashSet::new())),
         }
@@ -80,34 +80,46 @@ impl NetworkUnit {
 }
 
 pub fn network_periodic_sender(network_unit: NetworkUnit, network_channel_rx: Receiver<Communication>) {
-    let message: Option<Communication> = None;
-
     loop {
-        if let Ok(socket) = UdpSocket::bind("0.0.0.0:0").and_then(|s| { s.set_broadcast(true).map(|_| s) }) {
+        if let Ok(socket) = UdpSocket::bind("0.0.0.0:0")
+            .and_then(|s| s.set_broadcast(true).map(|_| s)) 
+        {
             let mut restart = false;
+            let mut current_message: Option<Communication> = None; // <-- Mutable holder
             
             while !restart {
-                cbc::select! {
-                    recv(network_channel_rx) -> msg => {
-                        if let Some(mut message) = msg.ok() {
-                            message.sender = network_unit.id;
-                            message.sender_role = network_unit.role;
-                        }
-                    },
-                    default(Duration::from_millis(100)) => {}
+                // Check for new messages first
+                if let Ok(msg) = network_channel_rx.try_recv() {
+                    let mut msg = msg;
+                    msg.sender = network_unit.id;
+                    msg.sender_role = network_unit.role;
+                    // println!("Sending message: {:#?}", msg);
+                    current_message = Some(msg);
                 }
 
-                if let Some(msg) = &message {
-                    if serde_json::to_string(msg).is_err() ||
-                       socket.send_to(&serde_json::to_string(msg).unwrap().as_bytes(), BROADCAST_ADDR).is_err()
-                    {
+                // Send the message if we have one
+                if let Some(msg) = &current_message {
+                    let json = match serde_json::to_string(msg) {
+                        Ok(j) => j,
+                        Err(e) => {
+                            eprintln!("JSON error: {}", e);
+                            restart = true;
+                            continue;
+                        }
+                    };
+                    
+                    if let Err(e) = socket.send_to(json.as_bytes(), BROADCAST_ADDR) {
+                        eprintln!("Send error: {}", e);
                         restart = true;
                     }
+                    
+                    current_message = None;
                 }
+
+                sleep(Duration::from_millis(100));
             }
         }
-        
-        sleep(Duration::from_secs(1)); // Wait before restarting
+        sleep(Duration::from_secs(1));
     }
 }
 
@@ -132,17 +144,18 @@ pub fn network_receiver(network_unit: NetworkUnit, master_channel_tx:Sender<Comm
         let mut buf = [0; 1024];
             
         loop {
+            // println!("RECIEVING:::");
             match socket.recv_from(&mut buf) {
                 Ok((size, _)) => {
                     // Attempt to parse the message
                     if let Ok(received) = str::from_utf8(&buf[..size]) {
+                        // println!("received");
                         if let Ok(msg) = serde_json::from_str::<Communication>(received) {
-                            if msg.target == network_unit.id || msg.target == TARGET_ALL {
-                                let network_unit = network_unit.clone();
-                                let master_channel_tx = master_channel_tx.clone();
-                                let elevator_channel_tx = elevator_channel_tx.clone();
-                                network_message_handler(network_unit,msg,master_channel_tx,elevator_channel_tx)
-                            }
+                            // println!("recieved: {:#?}",msg);
+                            let network_unit = network_unit.clone();
+                            let master_channel_tx = master_channel_tx.clone();
+                            let elevator_channel_tx = elevator_channel_tx.clone();
+                            network_message_handler(network_unit,msg,master_channel_tx,elevator_channel_tx)
                         }
                     }
                 }
@@ -161,9 +174,11 @@ pub fn network_receiver(network_unit: NetworkUnit, master_channel_tx:Sender<Comm
 
 // Recieves external network communcations and processes based on the comm_type
 fn network_message_handler(network_unit: NetworkUnit,message:Communication,master_channel_tx:Sender<Communication>,elevator_channel_tx:Sender<Communication>) {
+    // println!("Recieved message {:#?}", message);
     match message.target {
         MASTER => {
             if network_unit.role == MASTER {
+                println!("Sent to master {:#?}", message);
                 let _ = master_channel_tx.send(message);
             }
         }

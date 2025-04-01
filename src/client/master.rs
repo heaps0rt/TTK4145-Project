@@ -73,12 +73,17 @@ fn order_up(
 
 // Recieves external communcations and processes based on the comm_type
 fn receive_message(internal_order_channel_tx:Sender<InternalCommunication>, message: Communication) -> () {
-    if message.target == u8::MAX {
+    if message.target == MASTER {
         match message.comm_type {
             STATUS_MESSAGE => { // handled on the network unit
             }
             ORDER_TRANSFER => {
-                // Message is not for me
+                println!("Order transfer recieved: {:#?}",message.order);
+                let new_comm = InternalCommunication {
+                    intention: INSERT,
+                    order: Some(message.order.unwrap())
+                };
+                internal_order_channel_tx.send(new_comm).unwrap();
             }
             ORDER_ACK => { // Sends message to order memory in order to delete acknowledged order.
                 let new_comm = InternalCommunication {
@@ -143,7 +148,7 @@ pub fn run_master(network_unit:NetworkUnit,comms_channel_tx: Sender<Communicatio
             // Get info from comms_channel and process according to status if it is meant for us
             recv(comms_channel_rx) -> a => {
                 let message = a.unwrap();
-                // println!("Received message: {:#?}", message.comm_type);
+                println!("MASTER Received message: {:#?}", message.comm_type);
                 let internal_order_channel_tx = internal_order_channel_tx.clone();
                 receive_message(internal_order_channel_tx, message);
             }
