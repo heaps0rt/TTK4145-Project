@@ -260,7 +260,7 @@ fn handle_message_from_master(message: Communication, internal_order_channel_tx:
                 intention: INSERT,
                 order: Some(new_order)
             };
-            println!("ELEVATOR adding order {:#?}", message);
+            // println!("ELEVATOR adding order {:#?}", message);
             let internal_order_channel_tx = internal_order_channel_tx.clone();
             internal_order_channel_tx.send(new_comm).unwrap();
 

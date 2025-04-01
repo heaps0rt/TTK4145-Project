@@ -32,10 +32,8 @@ fn main() -> std::io::Result<()>{
     // Listen for statuses a bit before determining starting role
     {
         sleep(Duration::from_millis(3000));
-        let (role, my_master) = network_unit.determine_role();
-        network_unit.role = role;
-        network_unit.my_master = my_master;
-        println!("Set role as {}:",role)
+        network_unit.update_role();
+        println!("Set role as {}:",network_unit.role)
     }
 
     // Initialize network sender

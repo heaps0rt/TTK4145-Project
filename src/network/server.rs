@@ -34,12 +34,12 @@ impl NetworkUnit {
     pub fn get_state_list(&self) -> HashSet<State> {
         self.state_list.lock().unwrap().clone()
     }
-    pub fn determine_role(&self) -> (u8, Option<u8>) {
+    pub fn update_role(&mut self) {
         let state_list = self.state_list.lock().unwrap();
         let has_master = state_list.iter().any(|s| s.role == MASTER);
         let has_master_backup = state_list.iter().any(|s| s.role == MASTER_BACKUP);
     
-        if !has_master {
+        let (new_role, master_id) = if !has_master {
             // No master found, become master
             (MASTER, Some(self.id))
         } else if has_master && !has_master_backup {
@@ -54,28 +54,10 @@ impl NetworkUnit {
                 .find(|s| s.role == MASTER)
                 .map(|s| s.id);
             (SLAVE, master_id)
-        }
-    }
-    pub fn send_broadcast(&self,broadcast:Communication) {
-        let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket");
-        socket.set_broadcast(true).expect("Failed to enable broadcast");
+        };
         
-        let message = serde_json::to_string(&broadcast).expect("Failed to serialize broadcast");
-        socket.send_to(message.as_bytes(), BROADCAST_ADDR).expect("Failed to send broadcast");
-    }
-
-    pub fn receive_broadcast(&self) -> Option<Communication> {
-        let socket = UdpSocket::bind(LISTEN_ADDR).expect("Failed to bind socket");
-        socket.set_read_timeout(Some(Duration::from_secs(5))).expect("Failed to set timeout");
-        
-        let mut buf = [0; 1024];
-        match socket.recv_from(&mut buf) {
-            Ok((size, _)) => {
-                let received = str::from_utf8(&buf[..size]).expect("Failed to parse received data");
-                serde_json::from_str(received).ok()
-            }
-            Err(_) => None,
-        }
+        self.role = new_role;
+        self.my_master = master_id;
     }
 }
 
