@@ -1,0 +1,9 @@
+- Why would we aim to detect success in results, instead of the more classical way of detecting errors/failures?
+  - Avoids the risk of wrongly identifying failure.
+  - Error detection cannot catch all issues.
+  - Prioritizes safety; only validated states proceed.
+- Why would we want to self-terminate, instead of handling the error immediately in the "primary" (as opposed to deferring it to the backup as it "spins up")?
+  - Error handling risks recovery to a corrupt state, leading to more errors.
+  - Through self-termination we isolate the new instance from the precious errors.
+- Is there any reason to prefer a process pair style, as opposed to making a separate supervisor-like program whose sole purpose is to restart the main program?
+  - The process pair is simpler and self-sufficient.

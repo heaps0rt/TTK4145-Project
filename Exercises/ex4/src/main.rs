@@ -1,16 +1,10 @@
-use std::fs::OpenOptions;
+use std::fs::{File,OpenOptions};
 use std::io::prelude::*;
 use std::process::Command;
 use std::env;
-use std::fs::File;
-use chrono::{DateTime, Local, NaiveDateTime, Utc};
-use chrono::format::ParseError;
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
-use std::path::Path;
-use std::thread;
-use std::time::Duration;
+use std::io::{BufRead, BufReader};
+use std::time::{Duration,Instant};
 use std::thread::sleep;
-use std::time::Instant;
 
 fn master_alive() -> u8 {
     let file = File::open("count.txt").unwrap();
