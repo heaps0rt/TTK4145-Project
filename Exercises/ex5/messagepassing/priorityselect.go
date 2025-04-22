@@ -34,46 +34,38 @@ type Resource struct {
 	value []int // Resource type is []int. Each user appends its own id when executing.
 }
 
-func resourceManager(takeLow, takeHigh, giveBack chan Resource) {
-	res := Resource{}
-	var highPriorityQueue, lowPriorityQueue []chan struct{}
-	hasResource := false
+func resourceManager(takeLow chan Resource, takeHigh chan Resource, giveBack chan Resource) {
+	var res Resource
+	busy := false
 
 	for {
-		// First try to serve high priority requests
-		if len(highPriorityQueue) > 0 && hasResource {
+		if !busy {
 			select {
 			case takeHigh <- res:
-				hasResource = false
-				highPriorityQueue = highPriorityQueue[1:]
+				busy = true
 				continue
 			default:
-				// Receiver not ready, skip
-				highPriorityQueue = highPriorityQueue[1:]
 			}
-		}
 
-		// Then try low priority requests
-		if len(lowPriorityQueue) > 0 && hasResource {
 			select {
 			case takeLow <- res:
-				hasResource = false
-				lowPriorityQueue = lowPriorityQueue[1:]
+				busy = true
 				continue
 			default:
-				// Receiver not ready, skip
-				lowPriorityQueue = lowPriorityQueue[1:]
 			}
-		}
 
-		// Accept new requests or returns
-		select {
-		case <-takeHigh:
-			highPriorityQueue = append(highPriorityQueue, make(chan struct{}))
-		case <-takeLow:
-			lowPriorityQueue = append(lowPriorityQueue, make(chan struct{}))
-		case res = <-giveBack:
-			hasResource = true
+			select {
+			case takeHigh <- res:
+				busy = true
+			case takeLow <- res:
+				busy = true
+			case res = <-giveBack:
+			}
+		} else {
+			select {
+			case res = <-giveBack:
+				busy = false
+			}
 		}
 	}
 }
