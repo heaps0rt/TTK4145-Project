@@ -4,6 +4,9 @@ You do not have to answer every question in turn, as long as you address the con
 
 - Condition variables, Java monitors, and Ada protected objects are quite similar in what they do (temporarily yield execution so some other task can unblock us).
   - But in what ways do these mechanisms differ?
+    - Condition variables: Requires mutex pairing and manual condition checks.
+    - Java monitors:
+    - Ada protected objects: Guarded entries automatically queue tasks.
 
 - Bugs in this kind of low-level synchronization can be hard to spot.
   - Which solutions are you most confident are correct?
