@@ -13,9 +13,15 @@ You do not have to answer every question in turn, as long as you address the con
     - Ada protected objects and Go request message passing.
   - Why, and what does this say about code quality?
     - Ada's guards are evaluated atomically, and Go's message passing has no shared variables, only a centralized resource manager.
+    - Code quality improves with higher-level abstractions
 
 - We operated only with two priority levels here, but it makes sense for this "kind" of priority resource to support more priorities.
   - How would you extend these solutions to N priorities? Is it even possible to do this elegantly?
+    - Semaphores: Add a semaphore for each priority, complexity scales poorly.
+    - Condition variables: Add a 
+    - Protected objects: Add new entries for each priority level.
+    - Message passing request: 
+    - Message passing priority select: For priority select a new channel must be established for each priority level, introducing more complexity to the select workaround.
   - What (if anything) does that say about code quality?
 
 - In D's standard library, `getValue` for semaphores is not even exposed (probably because it is not portable – Windows semaphores don't have `getValue`, though you could hack it together with `ReleaseSemaphore()` and `WaitForSingleObject()`).
