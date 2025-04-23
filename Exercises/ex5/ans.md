@@ -4,13 +4,15 @@ You do not have to answer every question in turn, as long as you address the con
 
 - Condition variables, Java monitors, and Ada protected objects are quite similar in what they do (temporarily yield execution so some other task can unblock us).
   - But in what ways do these mechanisms differ?
-    - Condition variables: Requires mutex pairing and manual condition checks.
-    - Java monitors:
-    - Ada protected objects: Guarded entries automatically queue tasks.
+    - Condition variables: Requires mutex pairing and manual condition checks with wait loop.
+    - Java monitors: Implicit monitor generated through 'synchronized', but no native support for priority.
+    - Ada protected objects: Guarded entries automatically queue tasks. Handles the complexities internally, and guarantees atomicity.
 
 - Bugs in this kind of low-level synchronization can be hard to spot.
   - Which solutions are you most confident are correct?
+    - Ada protected objects and Go request message passing.
   - Why, and what does this say about code quality?
+    - Ada's guards are evaluated atomically, and Go's message passing has no shared variables, only a centralized resource manager.
 
 - We operated only with two priority levels here, but it makes sense for this "kind" of priority resource to support more priorities.
   - How would you extend these solutions to N priorities? Is it even possible to do this elegantly?
