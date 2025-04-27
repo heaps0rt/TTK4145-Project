@@ -23,13 +23,15 @@ You do not have to answer every question in turn, as long as you address the con
     - Message passing request: Built-in N priorities, elegant solution.
     - Message passing priority select: For priority select a new channel must be established for each priority level, introducing more complexity to the select workaround.
   - What (if anything) does that say about code quality?
-    - no
+    - Lower abstraction levels makes scaling more complex.
 
 - In D's standard library, `getValue` for semaphores is not even exposed (probably because it is not portable – Windows semaphores don't have `getValue`, though you could hack it together with `ReleaseSemaphore()` and `WaitForSingleObject()`).
   - A leading question: Is using `getValue` ever appropriate?
     - No
   - Explain your intuition: What is it that makes `getValue` so dubious?
-    - no
+    - The operation is not atomic. The value can change after it is fetched, introducing errors.
 
 - Which one(s) of these different mechanisms do you prefer, both for this specific task and in general? (This is a matter of taste – there are no "right" answers here)
-    - no
+    - The best synchronization mechanism is the one you don’t have to think about.
+    - For this specific task I preferred using Ada protected objects as it was the simplest solution.
+    - In general I prefer the Go request structure, because it is centralized.
