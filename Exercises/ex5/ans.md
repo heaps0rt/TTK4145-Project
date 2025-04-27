@@ -19,7 +19,7 @@ You do not have to answer every question in turn, as long as you address the con
   - How would you extend these solutions to N priorities? Is it even possible to do this elegantly?
     - Semaphores: Add a semaphore for each priority, complexity scales poorly.
     - Condition variables: Add a 
-    - Protected objects: Add new entries for each priority level.
+    - Protected objects: Add new entries for each priority level. Scales linearly, but for large values of N this will be a lot of code.
     - Message passing request: 
     - Message passing priority select: For priority select a new channel must be established for each priority level, introducing more complexity to the select workaround.
   - What (if anything) does that say about code quality?

@@ -29,7 +29,8 @@ procedure protectobj is
         busy: Boolean := False;
     end Resource;
     protected body Resource is
-        entry allocateHigh(val: out IntVec.Vector) when not busy is
+        entry allocateHigh(val: out IntVec.Vector)
+        when not busy is
         begin
             busy := True;
             val := value;
