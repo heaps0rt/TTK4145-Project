@@ -13,20 +13,20 @@ fn floor_recieved(
     destination_list_rx: Receiver<HashSet<Order>>
 ) -> () {
                 println!("Floor: {:#?}", floor);
-                let new_comm = InternalCommunication {
+                let destination_request = InternalCommunication {
                     intention: REQUEST_DESTINATION,
                     order: None
                 };
-                internal_order_channel_tx.send(new_comm).unwrap();
-                let a = destination_list_rx.recv();
-                let destination_list = a.unwrap();
+                internal_order_channel_tx.send(destination_request).unwrap();
+                let destination_list = destination_list_rx.recv().unwrap();
 
-                let new_comm2 = InternalCommunication {
+                let direction_request = InternalCommunication {
                     intention: REQUEST_DIRECTION,
                     order: None
                 };
-                internal_order_channel_tx.send(new_comm2).unwrap();
+                internal_order_channel_tx.send(direction_request).unwrap();
                 let dirn: u8 = elevator_readout_rx.recv().unwrap();
+                
                 // println!("Mottat retning: {:#?}", dirn);
                 // println!("Last floor updated to: {:#?}", last_floor);
                 {
